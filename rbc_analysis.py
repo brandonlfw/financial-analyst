@@ -271,6 +271,7 @@ def transactions_to_json(statement_df):
     # Write it to the new dataframe and export to excel
     updated_statement_df = statement_df.copy()
     updated_statement_df["Category"] = merchant_categories
+    updated_statement_df["Transaction Date"] = updated_statement_df["Transaction Date"].dt.date # strip the 00:00:00
 
     updated_statement_df.to_excel("statement.xlsx", index=False)
     print(f"Successfully wrote dataframe to statement.xlsx\n")
@@ -289,12 +290,29 @@ def analyze_transactions(statement_df, start_date, end_date):
     """
     total_debits = 0 # per date range/statement period
     total_credits = 0 # ^
-    flagged_transactions = []
+    flagged_above = []
+    flagged_below = []
     
     debits = {} # date: [trans1, trans2...]
     credits = {} # ^
 
-    for index, row in statement_df.iterrows(): # loops thru all transactions and sums all debits for total spending
+
+    # Debit transaction flagging
+    enable_flagging = input("\nEnable debit transaction flagging to catch fraud? Flag transactions that are ABOVE or BELOW a certain amount (Y/N): ")
+    if enable_flagging == 'Y':
+        print("\nType any NON-NUMERICAL character to skip a limit.")
+        try:
+            upper_limit = float("-" + input("Flag transactions above $"))
+        except ValueError:
+            upper_limit = statement_df['CAD$'].min() - 0.01 # choose the min value (most negative) - $0.01 as no debits exceed that, so no flagging
+        try:
+            lower_limit = float("-" + input("Flag transactions below $"))
+        except ValueError:
+            lower_limit = 0
+        
+        
+    # Loop thru all transactions and sums all debits for total spending
+    for index, row in statement_df.iterrows(): 
         if row["CAD$"] < 0: # transactions with '-' are debits
             total_debits += row["CAD$"]
         total_debits = round(total_debits, 2)
@@ -303,11 +321,17 @@ def analyze_transactions(statement_df, start_date, end_date):
             total_credits += row["CAD$"]
         total_credits = round(total_credits, 2)
 
-        if row["CAD$"] < -50 or (row["CAD$"] > -1 and row["CAD$"] < 0): # SHOULD ADD AN OPTION TO CHANGE THE THRESHOLDS FOR FLAGGING!
-            flagged_transactions.append(index) # the index is 2 behind the number on the csv
+        # Flag transactions at or ABOVE upper_limit
+        if row["CAD$"] <= upper_limit:
+            flagged_above.append(index) # the index is 2 behind the number on the csv
+
+        # Flag transactions at or BELOW lower_limit but ABOVE 0
+        if row["CAD$"] >= lower_limit and row["CAD$"] < 0:
+            flagged_below.append(index)
 
         # converts date format to YYYY-MM-DD
         date_str = row["Transaction Date"].strftime("%Y-%m-%d") 
+
 
         # DEBITS AND CREDITS DICTIONARY FOR SUMMING TOTALS ------------------------------------------------------------------------------------
         # Store all debits and credits from each merchant by date into a dictionary
@@ -328,16 +352,20 @@ def analyze_transactions(statement_df, start_date, end_date):
     print(f"Summary of transactions from {start_date.date()} to {end_date.date()}:")
     print(f"Total debits: ${-total_debits}") # Total spending in period
     print(f"Total credits: ${total_credits}\n") # Total credits in period
-    print(f"The following transactions were flagged for being over $50:") # Flagged transactions
 
-    for index in flagged_transactions:
+    print(f"\nThe following transactions were flagged for being at or ABOVE ${-upper_limit}:\n")
+    for index in flagged_above:
         transaction = statement_df.loc[index]
         print(f"CSV Index {index + 2} {transaction['Transaction Date'].date()}: {transaction['Description 1']} from {transaction['Description 2']} for ${-transaction['CAD$']}")
         # the dataframe index is 2 behind the number on the CSV, so we add 2 to it to get the correct index in the CSV statement
 
+    print(f"\nThe following transactions were flagged for being at or BELOW ${-lower_limit}:\n")
+    for index in flagged_below:
+        transaction = statement_df.loc[index]
+        print(f"CSV Index {index + 2} {transaction['Transaction Date'].date()}: {transaction['Description 1']} from {transaction['Description 2']} for ${-transaction['CAD$']}")
 
     # PLOT GRAPHS ------------------------------------------------------------------
-    plot_graphs.plot_graphs(statement_df, start_date, end_date, debits_by_date, credits_by_date)
+    # plot_graphs.plot_graphs(statement_df, start_date, end_date, debits_by_date, credits_by_date) # disable until fixed with new flagging system
 
 
 
