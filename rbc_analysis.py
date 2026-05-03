@@ -205,7 +205,6 @@ def transactions_to_json(statement_df):
     """
     TRANSACTION CATEGORIES:
         'CONTACTLESS INTERAC PURCHASE',
-        'CONTACTLESS INTERAC REFUND',
         'INTERAC PURCHASE',
         'VISA DEBIT PURCHASE',
         'VISA DEBIT REFUND'
@@ -213,9 +212,11 @@ def transactions_to_json(statement_df):
 
     other_categories = [
         'ONLINE BANKING TRANSFER',
+        'CONTACTLESS INTERAC REFUND',
         'E-TRANSFER SENT',
         'ATM TRANSFER TO DEPOSIT ACCT',
         'ATM DEPOSIT',
+        'ATM WITHDRAWAL',
         'E-TRANSFER',
         'INSURANCE CPL:',
         'PAYROLL DEPOSIT',
@@ -245,31 +246,31 @@ def transactions_to_json(statement_df):
         # converts date format to YYYY-MM-DD
         date_str = row["Transaction Date"].strftime("%Y-%m-%d") 
 
-        trans = merchants[merchant_name].get("transactions") # get the value of transactions ({})
-        if date_str not in trans:
-            trans[date_str] = []
-        trans[date_str].append(row["CAD$"])
-
-        # Retrieve the merchant's naic category if category NOT in other_categories
-        for i in other_categories:
-            if i in row["Description 1"]: # if Description 1 has an other_category, set that as the category
-                naic_category = i # set the NAIC category to the match from other_categories
+        for cat in other_categories:
+            if cat in desc_1: # if Description 1 has an other_category, set that as the category
+                naic_category = cat # set the NAIC category to the match from other_categories
+                merchants[merchant_name]["category"] = naic_category
+                if date_str not in merchants[cat]["transactions"]:
+                    merchants[cat]["transactions"][date_str] = []
+                merchants[cat]["transactions"][date_str].append(row["CAD$"])
                 naic_set = True
                 break
+
         if not naic_set: # if trans is not part of other_categories, find NAIC code from merchant name
+            trans = merchants[merchant_name].get("transactions") # get the value of transactions ({})
+            if date_str not in trans:
+                trans[date_str] = []
+            trans[date_str].append(row["CAD$"])
             naic_category = categorize_merchants(merchant_name, provinces, cities)
             merchants[merchant_name]["category"] = naic_category
-        else:
-            merchants[merchant_name]["category"] = naic_category
+            
                 
         merchant_categories.append(naic_category) # Add the category to a list for the new categorized df column
     
-    # print(merchant_categories)
 
     # Write it to the new dataframe and export to excel
     updated_statement_df = statement_df.copy()
     updated_statement_df["Category"] = merchant_categories
-    # print(updated_statement_df)
 
     updated_statement_df.to_excel("statement.xlsx", index=False)
     print(f"Successfully wrote dataframe to statement.xlsx\n")
