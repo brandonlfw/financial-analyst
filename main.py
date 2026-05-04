@@ -2,6 +2,7 @@ import pandas as pd
 import rbc_analysis
 import filter_transactions
 from datetime import datetime
+import sqlite3
 
 
 statement_file = input("Enter the name of the statement: ")
@@ -45,7 +46,7 @@ statement_df["Description 2"] = statement_df["Description 2"].str[5:]
 
 # Edge cases
 for index, row in statement_df.iterrows():
-    if "CONTACTLESS INTERAC REFUND" in row["Description 1"]: # 1) 
+    if "CONTACTLESS INTERAC REFUND" in row["Description 1"]:
         issuer = row["Description 1"][32:]
         statement_df.loc[index, "Description 1"] = "CONTACTLESS INTERAC REFUND"
         statement_df.loc[index, "Description 2"] = issuer
@@ -61,7 +62,7 @@ for index, row in statement_df.iterrows():
 
 
 rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
-rbc_analysis.transactions_to_json(statement_df)
+rbc_analysis.save_transactions(statement_df)
 
 # Save transactions (merchant, amt, date) to all_transactions list
 all_transactions = rbc_analysis.create_filtered_tuples()

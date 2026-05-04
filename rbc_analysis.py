@@ -190,26 +190,7 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 
-def transactions_to_json(statement_df):
-    """
-    Iterates each transaction item from statement_df and creates a new merchant key if it does not already exist in the merchants dictionary.
-    After merchant key creation, the value is another dictionary containing "category" and "transactions":
-    - "category" is retrieved by running categorize_merchants() and passing the merchant name, province, and city of transaction
-    - "transactions" has a dictionary value which contains each transaction date and all transactions from that date as a list
-    Afterwards, it writes all merchant data to merchants.json.
-    """
-    
-    merchants = {}
-    merchant_categories = []
-
-    """
-    TRANSACTION CATEGORIES:
-        'CONTACTLESS INTERAC PURCHASE',
-        'INTERAC PURCHASE',
-        'VISA DEBIT PURCHASE',
-        'VISA DEBIT REFUND'
-    """
-
+def save_transactions(statement_df):
     other_categories = [
         'ONLINE BANKING TRANSFER',
         'CONTACTLESS INTERAC REFUND',
@@ -223,63 +204,40 @@ def transactions_to_json(statement_df):
         'ONLINE TRANSFER TO DEPOSIT ACCOUNT',
         'MISC PAYMENT MFRP'
     ]
-    
-    # Add each other_category type to merchants dictionary
-    for cat in other_categories:
-        merchants[cat] = {
-            "category": cat,
-            "transactions": {}
-        }
 
-    # Location of purchases
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
     cities = input("City (separate with ', ' if multiple): ").strip()
 
-    for index, row in statement_df.iterrows(): # loops thru all transactions and sums all debits for total spending
-        naic_set = False
-        desc_1 = row.get("Description 1")
-        desc_2 = row.get("Description 2")
-        merchant_name = desc_2 if isinstance(desc_2, str) else desc_1 # if Description 2 does not exist on the dataframe, set to Description 1
+    df = statement_df.copy()
+    df["Transaction Date"] = df["Transaction Date"].dt.date
 
-        merchants.setdefault(merchant_name, {"category": "", "transactions": {}}) # {"[merchant_name]": "category: "", "transactions": {}}
+    # Create new 'Merchant' column: Description 2 if it exists, else use Description 1
+    df["Merchant"] = df.apply(
+        lambda row: row["Description 2"] if isinstance(row["Description 2"], str) else row["Description 1"],
+        axis=1
+    )
 
-        # converts date format to YYYY-MM-DD
-        date_str = row["Transaction Date"].strftime("%Y-%m-%d") 
-
+    def get_category(row):
+        # if category is in other_categories, return that as the category
         for cat in other_categories:
-            if cat in desc_1: # if Description 1 has an other_category, set that as the category
-                naic_category = cat # set the NAIC category to the match from other_categories
-                merchants[merchant_name]["category"] = naic_category
-                if date_str not in merchants[cat]["transactions"]:
-                    merchants[cat]["transactions"][date_str] = []
-                merchants[cat]["transactions"][date_str].append(row["CAD$"])
-                naic_set = True
-                break
+            if cat in str(row["Description 1"]):
+                return cat
+        
+        # else, find NAIC code using categorize_merchants()
+        return categorize_merchants(row["Merchant"], provinces, cities)
 
-        if not naic_set: # if trans is not part of other_categories, find NAIC code from merchant name
-            trans = merchants[merchant_name].get("transactions") # get the value of transactions ({})
-            if date_str not in trans:
-                trans[date_str] = []
-            trans[date_str].append(row["CAD$"])
-            naic_category = categorize_merchants(merchant_name, provinces, cities)
-            merchants[merchant_name]["category"] = naic_category
-            
-                
-        merchant_categories.append(naic_category) # Add the category to a list for the new categorized df column
-    
-
-    # Write it to the new dataframe and export to excel
-    updated_statement_df = statement_df.copy()
-    updated_statement_df["Category"] = merchant_categories
-    updated_statement_df["Transaction Date"] = updated_statement_df["Transaction Date"].dt.date # strip the 00:00:00
-
-    updated_statement_df.to_excel("statement.xlsx", index=False)
-    print(f"Successfully wrote dataframe to statement.xlsx\n")
+    df["Category"] = df.apply(get_category, axis=1)
 
 
-    # SAVE MERCHANT DATA TO JSON
-    with open("merchants.json", "w") as file:
-        json.dump(merchants, file)
+    # Write categorized transactions to excel
+    df.to_excel("statement.xlsx", index=False)
+    print("Successfully wrote dataframe to statement.xlsx\n")
+
+    # Save categorized transactions to db
+    conn = sqlite3.connect('transactions.db')
+    df.to_sql('transactions', conn, if_exists='replace', index=False)
+    conn.close()
+    print("Successfully saved transactions to transactions.db\n")
 
 
 
@@ -309,7 +267,9 @@ def analyze_transactions(statement_df, start_date, end_date):
             lower_limit = float("-" + input("Flag transactions below $"))
         except ValueError:
             lower_limit = 0
-        
+    elif enable_flagging == 'N':
+        upper_limit = statement_df['CAD$'].min() - 0.01
+        lower_limit = 0
         
     # Loop thru all transactions and sums all debits for total spending
     for index, row in statement_df.iterrows(): 
@@ -370,21 +330,11 @@ def analyze_transactions(statement_df, start_date, end_date):
 
 
 def create_filtered_tuples():
-    """
-    Creates tuples containing (merchant name, transaction amount, date) for filtering in filter_transactions().
-    """
-
-    all_transactions = []
-
-    with open("merchants.json", "r") as file:
-        merchants = json.load(file)
-
-        for merchant, merchant_data in merchants.items():
-            # print(f"{merchant}: {merchant_data}")
-            for date, amt in merchant_data["transactions"].items():
-                for ea_amt in amt:
-                    all_transactions.append((merchant, ea_amt, date)) # add all transactions as tuples in all_transactions list
-    
+    conn = sqlite3.connect('transactions.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT Merchant, "CAD$", "Transaction Date" FROM transactions')
+    all_transactions = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
+    conn.close()
     return all_transactions
 
 
