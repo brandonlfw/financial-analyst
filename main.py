@@ -64,5 +64,5 @@ rbc_analysis.save_transactions(statement_df)
 rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
 
 # Save transactions (merchant, amt, date) to all_transactions list
-all_transactions = rbc_analysis.create_filtered_tuples()
+all_transactions = filter_transactions.create_filtered_tuples()
 filter_transactions.filter(all_transactions)

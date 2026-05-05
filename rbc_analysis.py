@@ -2,7 +2,6 @@ import pandas as pd
 import plot_graphs
 import sqlite3
 import re
-from datetime import datetime
 
 
 def categorize_merchants(merchant_name, provinces, cities):
@@ -295,7 +294,10 @@ def analyze_transactions(statement_df, start_date, end_date):
     print(f"\nThese transactions were flagged for being at or above ${-upper_limit}:\n")
 
     for row in cursor:
-        print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
+        if row[2] == "E-TRANSFER SENT":
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} to {row[3]} for ${-row[4]}")
+        else:
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
 
     flagged_below_query = '''
         SELECT id, "Transaction Date", "Description 1", "Description 2", "CAD$"
@@ -306,7 +308,10 @@ def analyze_transactions(statement_df, start_date, end_date):
     cursor.execute(flagged_below_query, (lower_limit,))
     print(f"\nThese transactions were flagged for being at or below ${-lower_limit} but above $0:\n")
     for row in cursor:
-        print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}") # + 2 in on index because CSV has row 1 = column titles
+        if row[2] == "E-TRANSFER SENT":
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} to {row[3]} for ${-row[4]}") # + 2 in on index because CSV has row 1 = column titles
+        else:
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
 
 
 
@@ -315,41 +320,3 @@ def analyze_transactions(statement_df, start_date, end_date):
 
 
     conn.close()
-
-
-def create_filtered_tuples():
-    conn = sqlite3.connect('transactions.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT Merchant, "CAD$", "Transaction Date" FROM transactions')
-    all_transactions = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
-    conn.close()
-    return all_transactions
-
-
-
-def filter_transactions(all_transactions, merchant, min_amt, max_amt, min_date, max_date):
-    """
-    all_transactions containing (merchant, amt, date) tuples are passed along with user-inputted merchant name, min and max amount, earliest and latest date.
-    Each filter will reduce the # of tuples in filtered_list if the filter condition is not satisfied for that tuple, removing it.
-    The resulting filtered_list is printed.
-    """
-
-    filtered_list = all_transactions
-
-    # MERCHANT FILTER ---------------------------------------------------
-    if merchant:
-        filtered_list = [trans for trans in filtered_list if merchant.lower() in trans[0].lower()]
-
-    # TRANSACTION AMT FILTER --------------------------------------------
-    if min_amt:
-        filtered_list = [trans for trans in filtered_list if abs(trans[1]) >= float(min_amt)]
-    if max_amt:
-        filtered_list = [trans for trans in filtered_list if abs(trans[1]) <= float(max_amt)]
-    
-    # DATE FILTER -------------------------------------------------------
-    if min_date:
-        filtered_list = [trans for trans in filtered_list if datetime.strptime(trans[2], "%Y-%m-%d") >= min_date]
-    if max_date:
-        filtered_list = [trans for trans in filtered_list if datetime.strptime(trans[2], "%Y-%m-%d") <= max_date]
-
-    print(f"The filtered list is: {filtered_list}\n")
