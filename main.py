@@ -2,7 +2,6 @@ import pandas as pd
 import rbc_analysis
 import filter_transactions
 from datetime import datetime
-import sqlite3
 
 
 statement_file = input("Enter the name of the statement: ")
@@ -61,8 +60,8 @@ for index, row in statement_df.iterrows():
 
 
 
-rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
 rbc_analysis.save_transactions(statement_df)
+rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
 
 # Save transactions (merchant, amt, date) to all_transactions list
 all_transactions = rbc_analysis.create_filtered_tuples()

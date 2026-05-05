@@ -1,6 +1,5 @@
 import pandas as pd
 import plot_graphs
-import json
 import sqlite3
 import re
 from datetime import datetime
@@ -8,7 +7,7 @@ from datetime import datetime
 
 def categorize_merchants(merchant_name, provinces, cities):
     """
-    This function is passed a merchant name from transactions_to_json and classifies the merchant's category based off the name and user-passed province(s)/city(s) of purchase.
+    This function is passed a merchant name from save_transactions() and classifies the merchant's category based off the name and user-passed province(s)/city(s) of purchase.
     It queries CA_MERCHANTS.db for direct or similar matches to existing merchants in the ODBus database to find its NAIC code, then converts it to the corresponding category and returns it as a string.
     """
 
@@ -231,11 +230,18 @@ def save_transactions(statement_df):
 
     # Write categorized transactions to excel
     df.to_excel("statement.xlsx", index=False)
-    print("Successfully wrote dataframe to statement.xlsx\n")
+    print("\nSuccessfully wrote dataframe to statement.xlsx")
 
     # Save categorized transactions to db
     conn = sqlite3.connect('transactions.db')
-    df.to_sql('transactions', conn, if_exists='replace', index=False)
+    df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
+
+    # For testing db
+    # cursor = conn.cursor()
+    # cursor.execute('SELECT * FROM transactions')
+    # for row in cursor:
+    #     print(row)
+
     conn.close()
     print("Successfully saved transactions to transactions.db\n")
 
@@ -246,16 +252,15 @@ def analyze_transactions(statement_df, start_date, end_date):
     Iterate each transaction in statement_df and sum and print all debits, credits, and create list of all transactions $50 or above.
     Plot transactions graph with stars on flagged purchases >= $50 using plot_graphs() from plot_graphs module.
     """
-    total_debits = 0 # per date range/statement period
-    total_credits = 0 # ^
-    flagged_above = []
-    flagged_below = []
-    
-    debits = {} # date: [trans1, trans2...]
-    credits = {} # ^
+    total_debits = 0
+    total_credits = 0
+ 
+    # Connect to transactions.db
+    conn = sqlite3.connect('transactions.db')
+    cursor = conn.cursor()
 
 
-    # Debit transaction flagging
+    # Debit transaction flagging user inputs
     enable_flagging = input("\nEnable debit transaction flagging to catch fraud? Flag transactions that are ABOVE or BELOW a certain amount (Y/N): ")
     if enable_flagging == 'Y':
         print("\nType any NON-NUMERICAL character to skip a limit.")
@@ -271,62 +276,45 @@ def analyze_transactions(statement_df, start_date, end_date):
         upper_limit = statement_df['CAD$'].min() - 0.01
         lower_limit = 0
         
-    # Loop thru all transactions and sums all debits for total spending
-    for index, row in statement_df.iterrows(): 
-        if row["CAD$"] < 0: # transactions with '-' are debits
-            total_debits += row["CAD$"]
-        total_debits = round(total_debits, 2)
-
-        if row["CAD$"] > 0: # transactions with '+' are credits
-            total_credits += row["CAD$"]
-        total_credits = round(total_credits, 2)
-
-        # Flag transactions at or ABOVE upper_limit
-        if row["CAD$"] <= upper_limit:
-            flagged_above.append(index) # the index is 2 behind the number on the csv
-
-        # Flag transactions at or BELOW lower_limit but ABOVE 0
-        if row["CAD$"] >= lower_limit and row["CAD$"] < 0:
-            flagged_below.append(index)
-
-        # converts date format to YYYY-MM-DD
-        date_str = row["Transaction Date"].strftime("%Y-%m-%d") 
+    
+    # Summary
+    total_debits = cursor.execute('SELECT SUM("CAD$") FROM transactions WHERE "CAD$" < 0').fetchone()[0]
+    total_credits = cursor.execute('SELECT SUM("CAD$") FROM transactions WHERE "CAD$" > 0').fetchone()[0]
+    print(f"The total debits from {start_date.date()} to {end_date.date()} is ${-total_debits}")
+    print(f"The total credits from {start_date.date()} to {end_date.date()} is ${total_credits}")
 
 
-        # DEBITS AND CREDITS DICTIONARY FOR SUMMING TOTALS ------------------------------------------------------------------------------------
-        # Store all debits and credits from each merchant by date into a dictionary
-        if row["CAD$"] < 0: # debits
-            if date_str not in debits:
-                debits[date_str] = []
-            debits[date_str].append(row["CAD$"])
-        elif row["CAD$"] > 0: # credits
-            if date_str not in credits:
-                credits[date_str] = []
-            credits[date_str].append(row["CAD$"])
-        
-    # debits_by_date and credits_by_date are dicts with dates (keys) where there was a transaction(s), then adds the TOTAL debits/credits (value) for that day
-    debits_by_date = {date: round(sum(amts),2) for (date, amts) in debits.items()} # sum all debits for each date in dict
-    credits_by_date = {date: round(sum(amts),2) for (date, amts) in credits.items()} # sum all credits for each date in dict
+    # Flag transactions queries
+    flagged_above_query = '''
+        SELECT id, "Transaction Date", "Description 1", "Description 2", "CAD$"
+        FROM transactions
+        WHERE "CAD$" < ?
+    ''' # < because want amounts GREATER than a negative number (debit)
 
-    # SUMMARY ----------------------------------------------------------------------
-    print(f"Summary of transactions from {start_date.date()} to {end_date.date()}:")
-    print(f"Total debits: ${-total_debits}") # Total spending in period
-    print(f"Total credits: ${total_credits}\n") # Total credits in period
+    cursor.execute(flagged_above_query, (upper_limit,))
+    print(f"\nThese transactions were flagged for being at or above ${-upper_limit}:\n")
 
-    print(f"\nThe following transactions were flagged for being at or ABOVE ${-upper_limit}:\n")
-    for index in flagged_above:
-        transaction = statement_df.loc[index]
-        print(f"CSV Index {index + 2} {transaction['Transaction Date'].date()}: {transaction['Description 1']} from {transaction['Description 2']} for ${-transaction['CAD$']}")
-        # the dataframe index is 2 behind the number on the CSV, so we add 2 to it to get the correct index in the CSV statement
+    for row in cursor:
+        print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
 
-    print(f"\nThe following transactions were flagged for being at or BELOW ${-lower_limit}:\n")
-    for index in flagged_below:
-        transaction = statement_df.loc[index]
-        print(f"CSV Index {index + 2} {transaction['Transaction Date'].date()}: {transaction['Description 1']} from {transaction['Description 2']} for ${-transaction['CAD$']}")
+    flagged_below_query = '''
+        SELECT id, "Transaction Date", "Description 1", "Description 2", "CAD$"
+        FROM transactions
+        WHERE "CAD$" > ? AND "CAD$" < 0
+    ''' # > because want amounts LESS than a negative number (ex. lower_limit=-5, amt=$-3 => -3 > -5, so -3 is flagged)
+
+    cursor.execute(flagged_below_query, (lower_limit,))
+    print(f"\nThese transactions were flagged for being at or below ${-lower_limit} but above $0:\n")
+    for row in cursor:
+        print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}") # + 2 in on index because CSV has row 1 = column titles
+
+
 
     # PLOT GRAPHS ------------------------------------------------------------------
     # plot_graphs.plot_graphs(statement_df, start_date, end_date, debits_by_date, credits_by_date) # disable until fixed with new flagging system
 
+
+    conn.close()
 
 
 def create_filtered_tuples():
