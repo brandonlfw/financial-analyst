@@ -56,12 +56,23 @@ for index, row in statement_df.iterrows():
         statement_df.loc[index, "Description 1"] = "E-TRANSFER SENT"
         statement_df.loc[index, "Description 2"] = recipient
 
-    # E-TRANSFER - AUTO-DEPOSIT RECIPIENT
+    elif isinstance(row["Description 2"], str) and "EPOSIT" in row["Description 2"]: # for E-TRANSFER - AUTO-DEPOSIT RECIPIENT
+        sender = statement_df.loc[index, "Description 2"][6:] # remaining: RECIPIENT + REFERENCE CODE
+        sender = sender.rsplit(' ', 1)[0].strip() # only recipient remains
+        statement_df.loc[index, "Description 1"] = "E-TRANSFER - AUTO-DEPOSIT RECIPIENT"
+        statement_df.loc[index, "Description 2"] = sender
+
+    # ONLINE TRANSFER TO DEPOSIT ACCOUNT
+    elif "ONLINE TRANSFER TO DEPOSIT ACCOUNT" in row["Description 1"]:
+        ref_num = statement_df.loc[index, "Description 1"].rsplit('-', 1)[1] # take the right half of the '-'
+        statement_df.loc[index, "Description 1"] = "ONLINE TRANSFER TO DEPOSIT ACCOUNT"
+        statement_df.loc[index, "Description 2"] = ref_num
 
 
 
 rbc_analysis.save_transactions(statement_df)
 rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
+rbc_analysis.categorize_spending()
 
 # Save transactions (merchant, amt, date) to all_transactions list
 all_transactions = filter_transactions.create_filtered_tuples()

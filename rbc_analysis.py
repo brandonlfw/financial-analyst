@@ -320,3 +320,20 @@ def analyze_transactions(statement_df, start_date, end_date):
 
 
     conn.close()
+
+
+
+def categorize_spending():
+    conn = sqlite3.connect('transactions.db')
+    cursor = conn.cursor()
+
+    # Find distinct categories that have DEBIT transactions
+    cursor.execute('SELECT Category, SUM("CAD$") FROM transactions WHERE "CAD$" < 0 GROUP BY Category')
+    categories = cursor.fetchall()
+    
+    categorized_spending = {rows[0]: "$" + str(-rows[1]) for rows in categories}
+    print("\nThis is a categorized breakdown of your DEBIT transactions:\n")
+    print(categorized_spending)
+
+
+    conn.close()
