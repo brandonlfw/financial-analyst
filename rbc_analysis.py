@@ -1,5 +1,5 @@
 import pandas as pd
-import plot_graphs
+# import plot_graphs
 import sqlite3
 import re
 
@@ -206,14 +206,7 @@ def save_transactions(statement_df):
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
     cities = input("City (separate with ', ' if multiple): ").strip()
 
-    df = statement_df.copy()
-    df["Transaction Date"] = df["Transaction Date"].dt.date
-
-    # Create new 'Merchant' column: Description 2 if it exists, else use Description 1
-    df["Merchant"] = df.apply(
-        lambda row: row["Description 2"] if isinstance(row["Description 2"], str) else row["Description 1"],
-        axis=1
-    )
+    statement_df["Transaction Date"] = statement_df["Transaction Date"].dt.date
 
     def get_category(row):
         # if category is in other_categories, return that as the category
@@ -222,18 +215,18 @@ def save_transactions(statement_df):
                 return cat
         
         # else, find NAIC code using categorize_merchants()
-        return categorize_merchants(row["Merchant"], provinces, cities)
+        return categorize_merchants(row["Description 2"], provinces, cities)
 
-    df["Category"] = df.apply(get_category, axis=1)
+    statement_df["Category"] = statement_df.apply(get_category, axis=1)
 
 
     # Write categorized transactions to excel
-    df.to_excel("statement.xlsx", index=False)
+    statement_df.to_excel("statement.xlsx", index=False)
     print("\nSuccessfully wrote dataframe to statement.xlsx")
 
     # Save categorized transactions to db
     conn = sqlite3.connect('transactions.db')
-    df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
+    statement_df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
 
     # For testing db
     # cursor = conn.cursor()
@@ -296,8 +289,10 @@ def analyze_transactions(statement_df, start_date, end_date):
     for row in cursor:
         if row[2] == "E-TRANSFER SENT":
             print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} to {row[3]} for ${-row[4]}")
+        elif row[2] == "E-TRANSFER - AUTO-DEPOSIT":
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} recieved from {row[3]} for ${-row[4]}")
         else:
-            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} purchased from {row[3]} for ${-row[4]}")
 
     flagged_below_query = '''
         SELECT id, "Transaction Date", "Description 1", "Description 2", "CAD$"
@@ -310,8 +305,10 @@ def analyze_transactions(statement_df, start_date, end_date):
     for row in cursor:
         if row[2] == "E-TRANSFER SENT":
             print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} to {row[3]} for ${-row[4]}") # + 2 in on index because CSV has row 1 = column titles
+        elif row[2] == "E-TRANSFER - AUTO-DEPOSIT":
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} recieved from {row[3]} for ${-row[4]}")
         else:
-            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} from {row[3]} for ${-row[4]}")
+            print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} purchased from {row[3]} for ${-row[4]}")
 
 
 

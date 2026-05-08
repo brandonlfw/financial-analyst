@@ -39,34 +39,60 @@ statement_df = statement_df[(statement_df["Transaction Date"] >= start_date) & (
 
 # ------------------------ CLEAN "Description 1" by separating transaction type and setting business description to "Description 2" ------------------------------
 
-# Split "Description 1" by the " - " for all transaction types EXCEPT ones listed in edge cases below
-statement_df[["Description 1", "Description 2"]] = statement_df["Description 1"].str.split(" - ", expand=True, n=1) # split "Description 1" column at the " - ": 1st half remains in "Description 1", 2nd half goes in "Description 2"
-statement_df["Description 2"] = statement_df["Description 2"].str[5:]
+purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
+                         "CONTACTLESS INTERAC REFUND",
+                         "VISA DEBIT PURCHASE",
+                         "VISA DEBIT REFUND",
+                         "VISA DEBIT REVERSAL",
+                         "INTERAC PURCHASE",
+                         "INTERAC TRANSIT"] # set desc2 = merchant
 
-# Edge cases
-for index, row in statement_df.iterrows():
-    if "CONTACTLESS INTERAC REFUND" in row["Description 1"]:
-        issuer = row["Description 1"][32:]
-        statement_df.loc[index, "Description 1"] = "CONTACTLESS INTERAC REFUND"
-        statement_df.loc[index, "Description 2"] = issuer
 
-    elif "E-TRANSFER SENT" in row["Description 1"]: # No '-' separator. Strip the 16-char prefix "E-TRANSFER SENT ", then drop the last 7 chars (space + 6 digit ref code)
-        recipient_and_code = row["Description 1"][16:]
-        recipient = recipient_and_code.rsplit(' ', 1)[0] # split recipient_and_code into [recipient, code] and take recipient only
-        statement_df.loc[index, "Description 1"] = "E-TRANSFER SENT"
-        statement_df.loc[index, "Description 2"] = recipient
+atm_and_transfers = ["ATM DEPOSIT",
+                     "ATM WITHDRAWAL",
+                     "ONLINE TRANSFER TO DEPOSIT ACCOUNT",
+                     "ONLINE BANKING TRANSFER"] # set desc2 = ref code
 
-    elif isinstance(row["Description 2"], str) and "EPOSIT" in row["Description 2"]: # for E-TRANSFER - AUTO-DEPOSIT RECIPIENT
-        sender = statement_df.loc[index, "Description 2"][6:] # remaining: RECIPIENT + REFERENCE CODE
-        sender = sender.rsplit(' ', 1)[0].strip() # only recipient remains
-        statement_df.loc[index, "Description 1"] = "E-TRANSFER - AUTO-DEPOSIT RECIPIENT"
-        statement_df.loc[index, "Description 2"] = sender
+etransfers = ["E-TRANSFER SENT",
+             "E-TRANSFER - AUTO-DEPOSIT RECIPIENT"] # set desc2 = recipient or sender, specify TO or FROM in flagging
 
-    # ONLINE TRANSFER TO DEPOSIT ACCOUNT
-    elif "ONLINE TRANSFER TO DEPOSIT ACCOUNT" in row["Description 1"]:
-        ref_num = statement_df.loc[index, "Description 1"].rsplit('-', 1)[1] # take the right half of the '-'
-        statement_df.loc[index, "Description 1"] = "ONLINE TRANSFER TO DEPOSIT ACCOUNT"
-        statement_df.loc[index, "Description 2"] = ref_num
+other = ["STUDENT LOAN CANADA",
+         "STUDENT LOAN BC STUDENT AID",
+         "INSURANCE CPL:"] # set desc2 = desc1
+
+
+
+# Initialize Description 2 as object dtype so string assignments don't fail
+statement_df["Description 2"] = None
+
+# Purchases and Refunds - split left half of the '-' as Desc1, the right half for Desc2
+p_r_pattern = '|'.join(purchases_and_refunds)
+p_r_mask = statement_df["Description 1"].str.contains(p_r_pattern, na=False)
+split_result = statement_df.loc[p_r_mask, "Description 1"].str.split(r" - |-", expand=True, n=1, regex=True)
+statement_df.loc[p_r_mask, "Description 1"] = split_result[0].values
+statement_df.loc[p_r_mask, "Description 2"] = split_result[1].str[5:].values # get rid of 5 digit reference code
+
+# ATM and Transfers
+a_t_pattern = '|'.join(atm_and_transfers)
+a_t_mask = statement_df["Description 1"].str.contains(a_t_pattern, na=False)
+split_result = statement_df.loc[a_t_mask, "Description 1"].str.split(r' - |-', expand=True, regex=True)
+statement_df.loc[a_t_mask, "Description 1"] = split_result[0].values
+statement_df.loc[a_t_mask, "Description 2"] = split_result[1].values
+
+# E-TRANSFER - AUTODEPOSIT
+et_autodeposit = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
+statement_df.loc[et_autodeposit, "Description 2"] = statement_df.loc[et_autodeposit, "Description 1"].str[25:].str.rsplit(' ', n=1).str[0]
+statement_df.loc[et_autodeposit, "Description 1"] = statement_df.loc[et_autodeposit, "Description 1"].str[:24]
+
+# E-TRANSFER SENT
+et_sent = statement_df["Description 1"].str.contains("E-TRANSFER SENT")
+recipient = statement_df.loc[et_sent, "Description 1"].str[16:].str.rsplit(' ', n=1).str[0]
+statement_df.loc[et_sent, "Description 1"] = "E-TRANSFER SENT"
+statement_df.loc[et_sent, "Description 2"] = recipient
+
+# other: Description 2 = Description 1
+other_mask = statement_df["Description 1"].str.contains("|".join(other), na=False)
+statement_df.loc[other_mask, "Description 2"] = statement_df.loc[other_mask, "Description 1"]
 
 
 

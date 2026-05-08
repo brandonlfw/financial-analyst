@@ -6,7 +6,7 @@ from datetime import datetime
 def create_filtered_tuples():
     conn = sqlite3.connect('transactions.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT Merchant, "CAD$", "Transaction Date" FROM transactions')
+    cursor.execute('SELECT "Description 2", "CAD$", "Transaction Date" FROM transactions')
     all_transactions = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
     conn.close()
     return all_transactions
