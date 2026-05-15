@@ -88,7 +88,7 @@ if a_t_mask.any():
 # E-TRANSFER - AUTODEPOSIT
 et_ad_mask = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
 if et_ad_mask.any():
-    sender = statement_df.loc[et_ad_mask, "Description 1"].str[23:].str.rsplit(' ', n=1, expand=True) # [24:] gives sender + code, rsplit strips the code
+    sender = statement_df.loc[et_ad_mask, "Description 1"].str[25:].str.rsplit(' ', n=1, expand=True) # [24:] gives sender + code, rsplit strips the code
     print(sender)
     statement_df.loc[et_ad_mask, "Description 1"] = "E-TRANSFER - AUTODEPOSIT"
     statement_df.loc[et_ad_mask, "Description 2"] = sender[0]
@@ -100,12 +100,33 @@ if et_rqm_mask.any():
     statement_df.loc[et_rqm_mask, "Description 1"] = "E-TRANSFER - REQUEST MONEY"
     statement_df.loc[et_rqm_mask, "Description 2"] = sender
 
+# E-TRANSFER REQUEST FULFILLED
+et_rq_ff_mask = statement_df["Description 1"].str.contains("E-TRANSFER REQUEST FULFILLED")
+if et_rq_ff_mask.any():
+    recipient = statement_df.loc[et_rq_ff_mask, "Description 1"].str[30:].str.rsplit(' ', n=1).str[0]
+    statement_df.loc[et_rq_ff_mask, "Description 1"] = "E-TRANSFER REQUEST FULFILLED"
+    statement_df.loc[et_rq_ff_mask, "Description 2"] = recipient
+
 # E-TRANSFER SENT and E-TRANSFER RECEIVED
 et_mask = statement_df["Description 1"].str.contains("E-TRANSFER SENT|E-TRANSFER RECEIVED", na=False)
 if et_mask.any():
     type_and_person = statement_df.loc[et_mask, "Description 1"].str.split(' ', n=2, expand=True) # split into ['E-TRANSFER', either 'SENT' or 'RECEIVED', 'PERSON']
     statement_df.loc[et_mask, "Description 1"] = type_and_person[0] + " " + type_and_person[1] # "E-TRANSFER SENT" or "E-TRANSFER RECEIVED"
     statement_df.loc[et_mask, "Description 2"] = type_and_person[2].str.rsplit(' ', n=1).str[0]
+
+# PAYROLL DEPOSIT
+payroll_mask = statement_df["Description 1"].str.contains("PAYROLL DEPOSIT")
+if payroll_mask.any():
+    company = statement_df.loc[payroll_mask, "Description 1"].str[16:]
+    statement_df.loc[payroll_mask, "Description 1"] = "PAYROLL DEPOSIT"
+    statement_df.loc[payroll_mask, "Description 2"] = company
+
+# BANK INTERNAL TRANSACTION (BR TO BR)
+br_mask = statement_df["Description 1"].str.contains("BR TO BR")
+if br_mask.any():
+    ref_code = statement_df.loc[br_mask, "Description 1"].str[11:]
+    statement_df.loc[br_mask, "Description 1"] = "IN-BRANCH TRANSACTION"
+    statement_df.loc[br_mask, "Description 2"] = ref_code
 
 # other: Description 2 = Description 1
 other_mask = statement_df["Description 1"].str.contains("|".join(other), na=False)
