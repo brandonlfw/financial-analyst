@@ -75,7 +75,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                 WHEN derived_NAICS = '62' THEN 'Health care and social assistance'
                 WHEN derived_NAICS = '71' THEN 'Arts, entertainment and recreation'
                 WHEN derived_NAICS = '72' THEN 'Accommodation and food services'
-                WHEN derived_NAICS = '81' THEN 'Other services (except public administration)'
+                WHEN derived_NAICS = '81' THEN 'Other services'
                 WHEN derived_NAICS = '91' THEN 'Public administration'
 
                 ELSE 'N/A'
@@ -131,7 +131,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                 WHEN derived_NAICS = '62' THEN 'Health care and social assistance'
                 WHEN derived_NAICS = '71' THEN 'Arts, entertainment and recreation'
                 WHEN derived_NAICS = '72' THEN 'Accommodation and food services'
-                WHEN derived_NAICS = '81' THEN 'Other services (except public administration)'
+                WHEN derived_NAICS = '81' THEN 'Other services'
                 WHEN derived_NAICS = '91' THEN 'Public administration'
 
                 ELSE 'N/A'
@@ -195,11 +195,20 @@ def save_transactions(statement_df):
         'ATM TRANSFER TO DEPOSIT ACCT',
         'ATM',
         'E-TRANSFER',
-        'INSURANCE CPL:',
+        'INSURANCE',
         'PAYROLL DEPOSIT',
         'ONLINE TRANSFER TO DEPOSIT ACCOUNT',
-        'MISC PAYMENT'
+        'MISC PAYMENT',
+        'DEPOSIT',
+        'CHEQUE DEPOSIT'
     ]
+
+    # tf_wd_dp = [
+    #     'ONLINE BANKING TRANSFER',
+    #     'DEPOSIT',
+    #     'MOBILE CHEQUE DEPOSIT',
+    # ] # transfers, withdrawals, deposits
+
 
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
     cities = input("City (separate with ', ' if multiple): ").strip()

@@ -89,7 +89,6 @@ if a_t_mask.any():
 et_ad_mask = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
 if et_ad_mask.any():
     sender = statement_df.loc[et_ad_mask, "Description 1"].str[25:].str.rsplit(' ', n=1, expand=True) # [24:] gives sender + code, rsplit strips the code
-    print(sender)
     statement_df.loc[et_ad_mask, "Description 1"] = "E-TRANSFER - AUTODEPOSIT"
     statement_df.loc[et_ad_mask, "Description 2"] = sender[0]
 
@@ -127,6 +126,19 @@ if br_mask.any():
     ref_code = statement_df.loc[br_mask, "Description 1"].str[11:]
     statement_df.loc[br_mask, "Description 1"] = "IN-BRANCH TRANSACTION"
     statement_df.loc[br_mask, "Description 2"] = ref_code
+
+# MOBILE CHEQUE DEPOSIT
+cheque_mask = statement_df["Description 1"].str.contains("MOBILE CHEQUE DEPOSIT")
+if cheque_mask.any():
+    ref_code = statement_df.loc[cheque_mask, "Description 1"].str.rsplit(' ', n=1).str[1]
+    statement_df.loc[cheque_mask, "Description 1"] = "MOBILE CHEQUE DEPOSIT"
+    statement_df.loc[cheque_mask, "Description 2"] = "CHEQUE #" + ref_code
+
+# MISC PAYMENT
+misc_mask = statement_df["Description 1"].str.contains("MISC PAYMENT")
+if misc_mask.any():
+    statement_df.loc[misc_mask, "Description 2"] = statement_df.loc[misc_mask, "Description 1"].str[13:]
+    statement_df.loc[misc_mask, "Description 1"] = "MISC PAYMENT"
 
 # other: Description 2 = Description 1
 other_mask = statement_df["Description 1"].str.contains("|".join(other), na=False)
