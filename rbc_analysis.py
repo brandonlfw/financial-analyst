@@ -192,15 +192,13 @@ def save_transactions(statement_df):
     other_categories = [
         'ONLINE BANKING TRANSFER',
         'CONTACTLESS INTERAC REFUND',
-        'E-TRANSFER SENT',
         'ATM TRANSFER TO DEPOSIT ACCT',
-        'ATM DEPOSIT',
-        'ATM WITHDRAWAL',
+        'ATM',
         'E-TRANSFER',
         'INSURANCE CPL:',
         'PAYROLL DEPOSIT',
         'ONLINE TRANSFER TO DEPOSIT ACCOUNT',
-        'MISC PAYMENT MFRP'
+        'MISC PAYMENT'
     ]
 
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
@@ -208,16 +206,17 @@ def save_transactions(statement_df):
 
     statement_df["Transaction Date"] = statement_df["Transaction Date"].dt.date
 
-    def get_category(row):
-        # if category is in other_categories, return that as the category
-        for cat in other_categories:
-            if cat in str(row["Description 1"]):
-                return cat
-        
-        # else, find NAIC code using categorize_merchants()
-        return categorize_merchants(row["Description 2"], provinces, cities)
+    # use categorize_merchants() to find NAIC code for merchants whose Desc1 not in other_categories
 
-    statement_df["Category"] = statement_df.apply(get_category, axis=1)
+    pattern = '|'.join(re.escape(cat) for cat in other_categories)
+    mask = statement_df["Description 1"].str.contains(pattern, na=False)
+
+    statement_df["Category"] = statement_df.loc[mask, "Description 1"].str.extract(f'({pattern})')[0]
+    statement_df.loc[~mask, "Category"] = statement_df.loc[~mask].apply(
+        lambda row: categorize_merchants(row["Description 2"], provinces, cities), axis=1
+    )
+    
+
 
 
     # Write categorized transactions to excel

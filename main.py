@@ -54,12 +54,16 @@ atm_and_transfers = ["ATM DEPOSIT",
                      "ONLINE BANKING TRANSFER"] # set desc2 = ref code
 
 etransfers = ["E-TRANSFER SENT",
-             "E-TRANSFER - AUTO-DEPOSIT RECIPIENT"] # set desc2 = recipient or sender, specify TO or FROM in flagging
+             "E-TRANSFER - AUTODEPOSIT RECIPIENT",
+             "E-TRANSFER RECEIVED",
+             "E-TRANSFER - REQUEST MONEY",
+             "E-TRANSFER REQUEST FULFILLED"] # set desc2 = recipient or sender, specify TO or FROM in flagging
 
 other = ["STUDENT LOAN CANADA",
          "STUDENT LOAN BC STUDENT AID",
          "INSURANCE CPL:"] # set desc2 = desc1
 
+# DEPOSIT
 
 
 # Initialize Description 2 as object dtype so string assignments don't fail
@@ -68,31 +72,45 @@ statement_df["Description 2"] = None
 # Purchases and Refunds - split left half of the '-' as Desc1, the right half for Desc2
 p_r_pattern = '|'.join(purchases_and_refunds)
 p_r_mask = statement_df["Description 1"].str.contains(p_r_pattern, na=False)
-split_result = statement_df.loc[p_r_mask, "Description 1"].str.split(r" - |-", expand=True, n=1, regex=True)
-statement_df.loc[p_r_mask, "Description 1"] = split_result[0].values
-statement_df.loc[p_r_mask, "Description 2"] = split_result[1].str[5:].values # get rid of 5 digit reference code
+if p_r_mask.any():
+    split_result = statement_df.loc[p_r_mask, "Description 1"].str.split(r" - |-", expand=True, n=1, regex=True)
+    statement_df.loc[p_r_mask, "Description 1"] = split_result[0].values
+    statement_df.loc[p_r_mask, "Description 2"] = split_result[1].str[5:].values # get rid of 5 digit reference code
 
 # ATM and Transfers
 a_t_pattern = '|'.join(atm_and_transfers)
 a_t_mask = statement_df["Description 1"].str.contains(a_t_pattern, na=False)
-split_result = statement_df.loc[a_t_mask, "Description 1"].str.split(r' - |-', expand=True, regex=True)
-statement_df.loc[a_t_mask, "Description 1"] = split_result[0].values
-statement_df.loc[a_t_mask, "Description 2"] = split_result[1].values
+if a_t_mask.any():
+    split_result = statement_df.loc[a_t_mask, "Description 1"].str.split(r' - |-', expand=True, regex=True)
+    statement_df.loc[a_t_mask, "Description 1"] = split_result[0].values
+    statement_df.loc[a_t_mask, "Description 2"] = split_result[1].values
 
 # E-TRANSFER - AUTODEPOSIT
-et_autodeposit = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
-statement_df.loc[et_autodeposit, "Description 2"] = statement_df.loc[et_autodeposit, "Description 1"].str[25:].str.rsplit(' ', n=1).str[0]
-statement_df.loc[et_autodeposit, "Description 1"] = statement_df.loc[et_autodeposit, "Description 1"].str[:24]
+et_ad_mask = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
+if et_ad_mask.any():
+    sender = statement_df.loc[et_ad_mask, "Description 1"].str[23:].str.rsplit(' ', n=1, expand=True) # [24:] gives sender + code, rsplit strips the code
+    print(sender)
+    statement_df.loc[et_ad_mask, "Description 1"] = "E-TRANSFER - AUTODEPOSIT"
+    statement_df.loc[et_ad_mask, "Description 2"] = sender[0]
 
-# E-TRANSFER SENT
-et_sent = statement_df["Description 1"].str.contains("E-TRANSFER SENT")
-recipient = statement_df.loc[et_sent, "Description 1"].str[16:].str.rsplit(' ', n=1).str[0]
-statement_df.loc[et_sent, "Description 1"] = "E-TRANSFER SENT"
-statement_df.loc[et_sent, "Description 2"] = recipient
+# E-TRANSFER - REQUEST MONEY
+et_rqm_mask = statement_df["Description 1"].str.contains("E-TRANSFER - REQUEST MONEY")
+if et_rqm_mask.any():
+    sender = statement_df.loc[et_rqm_mask, "Description 1"].str[27:].str.rsplit(' ', n=1).str[0]
+    statement_df.loc[et_rqm_mask, "Description 1"] = "E-TRANSFER - REQUEST MONEY"
+    statement_df.loc[et_rqm_mask, "Description 2"] = sender
+
+# E-TRANSFER SENT and E-TRANSFER RECEIVED
+et_mask = statement_df["Description 1"].str.contains("E-TRANSFER SENT|E-TRANSFER RECEIVED", na=False)
+if et_mask.any():
+    type_and_person = statement_df.loc[et_mask, "Description 1"].str.split(' ', n=2, expand=True) # split into ['E-TRANSFER', either 'SENT' or 'RECEIVED', 'PERSON']
+    statement_df.loc[et_mask, "Description 1"] = type_and_person[0] + " " + type_and_person[1] # "E-TRANSFER SENT" or "E-TRANSFER RECEIVED"
+    statement_df.loc[et_mask, "Description 2"] = type_and_person[2].str.rsplit(' ', n=1).str[0]
 
 # other: Description 2 = Description 1
 other_mask = statement_df["Description 1"].str.contains("|".join(other), na=False)
-statement_df.loc[other_mask, "Description 2"] = statement_df.loc[other_mask, "Description 1"]
+if other_mask.any():
+    statement_df.loc[other_mask, "Description 2"] = statement_df.loc[other_mask, "Description 1"]
 
 
 
