@@ -17,13 +17,13 @@ def categorize_merchants(merchant_name, provinces, cities):
     provinces_list = [province.strip() for province in provinces.split(', ') if province.strip()] if provinces else []
     city_list = [city.strip() for city in cities.split(', ') if city.strip()] if cities else []
 
-    filler_words = ["THE", "OF", "LTD", "STORE"]
+    filler_words = ["THE", "OF", "LTD", "STORE", "WHOLESALE"]
 
     if not isinstance(merchant_name, str): # if merchant is not a string, skip to next merchant
         return "N/A" # return N/A for NAIC category
 
     # turn merchant all uppercase, replace non-letters with space, get rid of whitespace
-    clean_name = re.sub(r"[^A-Z\s'-]", ' ', merchant_name.upper()).strip()
+    clean_name = re.sub(r"[^A-Z\s]", '', merchant_name.upper()).strip()
 
     # insert each word from clean_name as an element of split_name list; do not add word if only 1 character (ex. '-')
     split_name = [word for word in clean_name.split() if word and word not in filler_words and len(word) > 1]
@@ -171,7 +171,7 @@ def categorize_merchants(merchant_name, provinces, cities):
     if row is not None:
         # return the NAIC category
         # print(f"{merchant_name} NAIC code is {row[0]}")
-        return row[0] 
+        return row[0]
     else:
         # Attempt B: any word present (OR between pair_clauses) if no rows found
         cursor.execute(any_query, full_params)
@@ -189,10 +189,9 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 def save_transactions(statement_df):
-    other_categories = [
+    categories = [
         'ONLINE BANKING TRANSFER',
         'CONTACTLESS INTERAC REFUND',
-        'ATM TRANSFER TO DEPOSIT ACCT',
         'ATM',
         'E-TRANSFER',
         'INSURANCE',
@@ -203,28 +202,44 @@ def save_transactions(statement_df):
         'CHEQUE DEPOSIT'
     ]
 
-    # tf_wd_dp = [
-    #     'ONLINE BANKING TRANSFER',
-    #     'DEPOSIT',
-    #     'MOBILE CHEQUE DEPOSIT',
-    # ] # transfers, withdrawals, deposits
-
+    purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
+                         "CONTACTLESS INTERAC REFUND",
+                         "VISA DEBIT PURCHASE",
+                         "VISA DEBIT REFUND",
+                         "VISA DEBIT REVERSAL",
+                         "INTERAC PURCHASE",
+                         "INTERAC TRANSIT"
+                         ]
+    
+    non_merchant_categories = categories + purchases_and_refunds
 
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
     cities = input("City (separate with ', ' if multiple): ").strip()
 
     statement_df["Transaction Date"] = statement_df["Transaction Date"].dt.date
 
+    cat_pattern = '|'.join(re.escape(cat) for cat in categories) # re.escape to allow special chars
+    pr_pattern = '|'.join(purchases_and_refunds)
+    non_merchant_pattern = '|'.join(non_merchant_categories)
+
+    cat_mask = statement_df["Description 1"].str.contains(cat_pattern, na=False)
+    pr_mask = statement_df["Description 1"].str.contains(pr_pattern)
+    non_merchant_mask = ~statement_df["Description 1"].str.contains(non_merchant_pattern, na=False)
+
+    # if one of the categories are in Desc1, extract first complete match from the Desc1 and set as Category (ex. "ATM DEPOSIT" -> "ATM" bc "ATM" in categories list)
+    if cat_mask.any():
+        statement_df.loc[cat_mask, "Category"] = statement_df.loc[cat_mask, "Description 1"].str.extract(f'({cat_pattern})')[0]
+
     # use categorize_merchants() to find NAIC code for merchants whose Desc1 not in other_categories
+    if pr_mask.any():
+        statement_df.loc[pr_mask, "Category"] = statement_df.loc[pr_mask].apply(
+            lambda row: categorize_merchants(row["Description 2"], provinces, cities), axis=1
+        )
 
-    pattern = '|'.join(re.escape(cat) for cat in other_categories)
-    mask = statement_df["Description 1"].str.contains(pattern, na=False)
-
-    statement_df["Category"] = statement_df.loc[mask, "Description 1"].str.extract(f'({pattern})')[0]
-    statement_df.loc[~mask, "Category"] = statement_df.loc[~mask].apply(
-        lambda row: categorize_merchants(row["Description 2"], provinces, cities), axis=1
-    )
-    
+    # if Desc1 is not a category or a purchase/refund, set its Category to "Other"
+    if non_merchant_mask.any():
+        statement_df.loc[non_merchant_mask, "Description 2"] = statement_df.loc[non_merchant_mask, "Description 1"]
+        statement_df.loc[non_merchant_mask, "Category"] = "Other"
 
 
 

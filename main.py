@@ -50,20 +50,17 @@ purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
 
 atm_and_transfers = ["ATM DEPOSIT",
                      "ATM WITHDRAWAL",
+                     "ATM TRANSFER TO DEPOSIT ACCT",
                      "ONLINE TRANSFER TO DEPOSIT ACCOUNT",
                      "ONLINE BANKING TRANSFER"] # set desc2 = ref code
 
-etransfers = ["E-TRANSFER SENT",
-             "E-TRANSFER - AUTODEPOSIT RECIPIENT",
-             "E-TRANSFER RECEIVED",
-             "E-TRANSFER - REQUEST MONEY",
-             "E-TRANSFER REQUEST FULFILLED"] # set desc2 = recipient or sender, specify TO or FROM in flagging
-
-other = ["STUDENT LOAN CANADA",
-         "STUDENT LOAN BC STUDENT AID",
-         "INSURANCE CPL:"] # set desc2 = desc1
-
-# DEPOSIT
+''' E-TRANSFERS: set desc2 = recipient or sender, specify TO or FROM in flagging
+    "E-TRANSFER SENT",
+    "E-TRANSFER - AUTODEPOSIT RECIPIENT",
+    "E-TRANSFER RECEIVED",
+    "E-TRANSFER - REQUEST MONEY",
+    "E-TRANSFER REQUEST FULFILLED"
+'''
 
 
 # Initialize Description 2 as object dtype so string assignments don't fail
@@ -85,6 +82,8 @@ if a_t_mask.any():
     statement_df.loc[a_t_mask, "Description 1"] = split_result[0].values
     statement_df.loc[a_t_mask, "Description 2"] = split_result[1].values
 
+
+# --------------------- SPECIAL CASES ----------------------
 # E-TRANSFER - AUTODEPOSIT
 et_ad_mask = statement_df["Description 1"].str.contains("E-TRANSFER - AUTODEPOSIT")
 if et_ad_mask.any():
@@ -134,16 +133,22 @@ if cheque_mask.any():
     statement_df.loc[cheque_mask, "Description 1"] = "MOBILE CHEQUE DEPOSIT"
     statement_df.loc[cheque_mask, "Description 2"] = "CHEQUE #" + ref_code
 
+# INSURANCE
+insurance_mask = statement_df["Description 1"].str.contains("INSURANCE")
+if insurance_mask.any():
+    statement_df.loc[insurance_mask, "Description 2"] = "INSURANCE"
+
+# DEPOSITS
+deposit_mask = statement_df["Description 1"] == "DEPOSIT"
+if deposit_mask.any():
+    statement_df.loc[deposit_mask, "Description 2"] = "DEPOSIT"
+
 # MISC PAYMENT
 misc_mask = statement_df["Description 1"].str.contains("MISC PAYMENT")
 if misc_mask.any():
     statement_df.loc[misc_mask, "Description 2"] = statement_df.loc[misc_mask, "Description 1"].str[13:]
     statement_df.loc[misc_mask, "Description 1"] = "MISC PAYMENT"
 
-# other: Description 2 = Description 1
-other_mask = statement_df["Description 1"].str.contains("|".join(other), na=False)
-if other_mask.any():
-    statement_df.loc[other_mask, "Description 2"] = statement_df.loc[other_mask, "Description 1"]
 
 
 
