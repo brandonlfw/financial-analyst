@@ -188,7 +188,7 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 
-def save_transactions(statement_df):
+def save_transactions(statement_df, statement_fname):
     categories = [
         'ONLINE BANKING TRANSFER',
         'CONTACTLESS INTERAC REFUND',
@@ -244,22 +244,24 @@ def save_transactions(statement_df):
 
 
     # Write categorized transactions to excel
-    statement_df.to_excel("statement.xlsx", index=False)
-    print("\nSuccessfully wrote dataframe to statement.xlsx")
+    with pd.ExcelWriter(f"{statement_fname}_analyzed.xlsx", engine="openpyxl") as writer:
+        statement_df.to_excel(writer, sheet_name="All Transactions", index=False)
+
+        for category, group_df in statement_df.groupby("Category"):
+            sheet_name = re.sub(r'[\\/*?:\[\]]', '', str(category))[:31] # strip forbidden characters (\ / * ? : [ ]) for sheet names and truncate name to 31 characters max
+            group_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    print(f"\nSuccessfully wrote dataframe to {statement_fname}_analyzed.xlsx")
+
 
     # Save categorized transactions to db
     conn = sqlite3.connect('transactions.db')
     statement_df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
-
-    # For testing db
-    # cursor = conn.cursor()
-    # cursor.execute('SELECT * FROM transactions')
-    # for row in cursor:
-    #     print(row)
-
-    conn.close()
     print("Successfully saved transactions to transactions.db\n")
 
+
+    conn.close()
+    
 
 
 def analyze_transactions(statement_df, start_date, end_date):
