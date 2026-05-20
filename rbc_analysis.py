@@ -199,7 +199,7 @@ def save_transactions(statement_df, statement_fname):
         'ONLINE TRANSFER TO DEPOSIT ACCOUNT',
         'MISC PAYMENT',
         'DEPOSIT',
-        'CHEQUE DEPOSIT'
+        'CHEQUE'
     ]
 
     purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
@@ -249,6 +249,13 @@ def save_transactions(statement_df, statement_fname):
 
         for category, group_df in statement_df.groupby("Category"):
             sheet_name = re.sub(r'[\\/*?:\[\]]', '', str(category))[:31] # strip forbidden characters (\ / * ? : [ ]) for sheet names and truncate name to 31 characters max
+            
+            total_row = {col: None for col in group_df.columns}
+            total_row["Description 2"] = "TOTAL"
+            total_row["CAD$"] = group_df["CAD$"].sum()
+
+            group_df = pd.concat([group_df, pd.DataFrame([total_row])], ignore_index=True) # add total row to bottom of the group_df
+
             group_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     print(f"\nSuccessfully wrote dataframe to {statement_fname}_analyzed.xlsx")
