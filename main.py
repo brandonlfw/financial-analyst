@@ -5,6 +5,7 @@ from datetime import datetime
 
 
 statement_file = input("Enter the name of the statement: ")
+statement_name = statement_file.rsplit('.', 1)[0]
 statement_df = pd.read_csv(statement_file)
 
 print("Enter a custom statement range or press 'Enter' to use the end ranges.")
@@ -152,7 +153,7 @@ if misc_mask.any():
 
 
 
-rbc_analysis.save_transactions(statement_df, statement_file)
+rbc_analysis.save_transactions(statement_df, statement_name)
 rbc_analysis.analyze_transactions(statement_df, start_date, end_date)
 rbc_analysis.categorize_spending()
 

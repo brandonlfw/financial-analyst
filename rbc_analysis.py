@@ -52,113 +52,91 @@ def categorize_merchants(merchant_name, provinces, cities):
     # Direct match =========================================
     all_clause = " AND ".join([pair_clause for _ in split_name])
     all_query = f"""
-        SELECT
-            CASE
-                WHEN derived_NAICS = '11' THEN 'Agriculture, forestry, fishing and hunting'
-                WHEN derived_NAICS = '21' THEN 'Mining, quarrying, and oil and gas extraction'
-                WHEN derived_NAICS = '22' THEN 'Utilities'
-                WHEN derived_NAICS = '23' THEN 'Construction'
-
-                WHEN derived_NAICS BETWEEN '31' AND '33' THEN 'Manufacturing'
-                WHEN derived_NAICS = '41' THEN 'Wholesale trade'
-                WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail trade'
-                WHEN derived_NAICS BETWEEN '48' AND '49' THEN 'Transportation and warehousing'
-
-                WHEN derived_NAICS = '51' THEN 'Information and cultural industries'
-                WHEN derived_NAICS = '52' THEN 'Finance and insurance'
-                WHEN derived_NAICS = '53' THEN 'Real estate and rental and leasing'
-                WHEN derived_NAICS = '54' THEN 'Professional, scientific and technical services'
-                WHEN derived_NAICS = '55' THEN 'Management of companies and enterprises'
-                WHEN derived_NAICS = '56' THEN 'Administrative and support, waste management and remediation services'
-
-                WHEN derived_NAICS = '61' THEN 'Educational services'
-                WHEN derived_NAICS = '62' THEN 'Health care and social assistance'
-                WHEN derived_NAICS = '71' THEN 'Arts, entertainment and recreation'
-                WHEN derived_NAICS = '72' THEN 'Accommodation and food services'
-                WHEN derived_NAICS = '81' THEN 'Other services'
-                WHEN derived_NAICS = '91' THEN 'Public administration'
-
-                ELSE 'N/A'
-            END AS merchant_category
+        SELECT merchant_category
         FROM (
-            SELECT 
-                derived_NAICS,
-                COUNT(*) AS NAIC_count
+            SELECT
+                CASE
+                    WHEN derived_NAICS = '22' THEN 'Utilities'
+                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail Trade'
+                    WHEN derived_NAICS = '52' THEN 'Finance and Insurance'
+                    WHEN derived_NAICS IN ('54', '81', '91') THEN 'Professional Services'
+                    WHEN derived_NAICS = '62' THEN 'Healthcare'
+                    WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
+                    WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
+                    ELSE 'N/A'
+                END AS merchant_category,
+                NAIC_count
             FROM (
-                SELECT 
-                    UPPER(business_name), 
-                    UPPER(alt_business_name), 
-                    derived_NAICS, 
-                    city, 
-                    prov_terr
-                FROM 
-                    MERCHANT_INFO
-                WHERE 
-                    {(' AND '.join(where_clause) + ' AND ') if where_clause else ''}({all_clause})
-                LIMIT 20
-            ) sub
-            GROUP BY
-                derived_NAICS
-            ORDER BY
-                NAIC_count DESC
-            LIMIT 1
-        ) sub2
+                SELECT
+                    derived_NAICS,
+                    COUNT(*) AS NAIC_count
+                FROM (
+                    SELECT
+                        UPPER(business_name),
+                        UPPER(alt_business_name),
+                        derived_NAICS,
+                        city,
+                        prov_terr
+                    FROM
+                        MERCHANT_INFO
+                    WHERE
+                        {(' AND '.join(where_clause) + ' AND ') if where_clause else ''}({all_clause})
+                    LIMIT 20
+                ) sub
+                GROUP BY
+                    derived_NAICS
+                ORDER BY
+                    NAIC_count DESC
+            ) sub2
+        ) sub3
+        WHERE merchant_category != 'N/A'
+        ORDER BY NAIC_count DESC
+        LIMIT 1
     """
 
     # Any word match =========================================
     any_clause = " OR ".join([pair_clause for _ in split_name])
     any_query = f"""
-        SELECT
-            CASE
-                WHEN derived_NAICS = '11' THEN 'Agriculture, forestry, fishing and hunting'
-                WHEN derived_NAICS = '21' THEN 'Mining, quarrying, and oil and gas extraction'
-                WHEN derived_NAICS = '22' THEN 'Utilities'
-                WHEN derived_NAICS = '23' THEN 'Construction'
-
-                WHEN derived_NAICS BETWEEN '31' AND '33' THEN 'Manufacturing'
-                WHEN derived_NAICS = '41' THEN 'Wholesale trade'
-                WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail trade'
-                WHEN derived_NAICS BETWEEN '48' AND '49' THEN 'Transportation and warehousing'
-
-                WHEN derived_NAICS = '51' THEN 'Information and cultural industries'
-                WHEN derived_NAICS = '52' THEN 'Finance and insurance'
-                WHEN derived_NAICS = '53' THEN 'Real estate and rental and leasing'
-                WHEN derived_NAICS = '54' THEN 'Professional, scientific and technical services'
-                WHEN derived_NAICS = '55' THEN 'Management of companies and enterprises'
-                WHEN derived_NAICS = '56' THEN 'Administrative and support, waste management and remediation services'
-
-                WHEN derived_NAICS = '61' THEN 'Educational services'
-                WHEN derived_NAICS = '62' THEN 'Health care and social assistance'
-                WHEN derived_NAICS = '71' THEN 'Arts, entertainment and recreation'
-                WHEN derived_NAICS = '72' THEN 'Accommodation and food services'
-                WHEN derived_NAICS = '81' THEN 'Other services'
-                WHEN derived_NAICS = '91' THEN 'Public administration'
-
-                ELSE 'N/A'
-            END AS merchant_category
+        SELECT merchant_category
         FROM (
-            SELECT 
-                derived_NAICS,
-                COUNT(*) AS NAIC_count
+            SELECT
+                CASE
+                    WHEN derived_NAICS = '22' THEN 'Utilities'
+                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail Trade'
+                    WHEN derived_NAICS = '52' THEN 'Finance and Insurance'
+                    WHEN derived_NAICS IN ('54', '81', '91') THEN 'Professional Services'
+                    WHEN derived_NAICS = '62' THEN 'Healthcare'
+                    WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
+                    WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
+                    ELSE 'N/A'
+                END AS merchant_category,
+                NAIC_count
             FROM (
-                SELECT 
-                    UPPER(business_name), 
-                    UPPER(alt_business_name), 
-                    derived_NAICS, 
-                    city, 
-                    prov_terr
-                FROM 
-                    MERCHANT_INFO
-                WHERE 
-                    {(' AND '.join(where_clause) + ' AND ') if where_clause else ''}({any_clause})
-                LIMIT 20
-            ) sub
-            GROUP BY
-                derived_NAICS
-            ORDER BY
-                NAIC_count DESC
-            LIMIT 1
-        ) sub2
+                SELECT
+                    derived_NAICS,
+                    COUNT(*) AS NAIC_count
+                FROM (
+                    SELECT
+                        UPPER(business_name),
+                        UPPER(alt_business_name),
+                        derived_NAICS,
+                        city,
+                        prov_terr
+                    FROM
+                        MERCHANT_INFO
+                    WHERE
+                        {(' AND '.join(where_clause) + ' AND ') if where_clause else ''}({any_clause})
+                    LIMIT 20
+                ) sub
+                GROUP BY
+                    derived_NAICS
+                ORDER BY
+                    NAIC_count DESC
+            ) sub2
+        ) sub3
+        WHERE merchant_category != 'N/A'
+        ORDER BY NAIC_count DESC
+        LIMIT 1
     """
 
     # add # wildcard to front and back of each word in split_word twice (b/c business_name and alt_business_name are back to back in the WHERE)
@@ -190,16 +168,16 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 def save_transactions(statement_df, statement_fname):
     categories = [
-        'ONLINE BANKING TRANSFER',
-        'CONTACTLESS INTERAC REFUND',
-        'ATM',
-        'E-TRANSFER',
-        'INSURANCE',
-        'PAYROLL DEPOSIT',
-        'ONLINE TRANSFER TO DEPOSIT ACCOUNT',
-        'MISC PAYMENT',
-        'DEPOSIT',
-        'CHEQUE'
+        'Online Banking Transfer',
+        'Contactless Interac Refund',
+        'ATM Transaction',
+        'E-Transfer',
+        'Insurance',
+        'Payroll Deposit',
+        'Online Transfer to Deposit Account',
+        'Misc Payment',
+        'Deposit',
+        'Cheque'
     ]
 
     purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
@@ -222,13 +200,18 @@ def save_transactions(statement_df, statement_fname):
     pr_pattern = '|'.join(purchases_and_refunds)
     non_merchant_pattern = '|'.join(non_merchant_categories)
 
-    cat_mask = statement_df["Description 1"].str.contains(cat_pattern, na=False)
+    cat_mask = statement_df["Description 1"].str.contains(cat_pattern, na=False, case=False)
     pr_mask = statement_df["Description 1"].str.contains(pr_pattern)
-    non_merchant_mask = ~statement_df["Description 1"].str.contains(non_merchant_pattern, na=False)
+    non_merchant_mask = ~statement_df["Description 1"].str.contains(non_merchant_pattern, na=False, case=False)
 
-    # if one of the categories are in Desc1, extract first complete match from the Desc1 and set as Category (ex. "ATM DEPOSIT" -> "ATM" bc "ATM" in categories list)
+    # if one of the categories are in Desc1, find the matching category name and set as Category
     if cat_mask.any():
-        statement_df.loc[cat_mask, "Category"] = statement_df.loc[cat_mask, "Description 1"].str.extract(f'({cat_pattern})')[0]
+        def find_category(desc):
+            for cat in categories:
+                if re.search(re.escape(cat), desc, re.IGNORECASE):
+                    return cat
+            return None
+        statement_df.loc[cat_mask, "Category"] = statement_df.loc[cat_mask, "Description 1"].apply(find_category)
 
     # use categorize_merchants() to find NAIC code for merchants whose Desc1 not in other_categories
     if pr_mask.any():
