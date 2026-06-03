@@ -57,7 +57,7 @@ def categorize_merchants(merchant_name, provinces, cities):
             SELECT
                 CASE
                     WHEN derived_NAICS = '22' THEN 'Utilities'
-                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail Trade'
+                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail and Groceries'
                     WHEN derived_NAICS = '52' THEN 'Finance and Insurance'
                     WHEN derived_NAICS IN ('54', '81', '91') THEN 'Professional Services'
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
@@ -102,7 +102,7 @@ def categorize_merchants(merchant_name, provinces, cities):
             SELECT
                 CASE
                     WHEN derived_NAICS = '22' THEN 'Utilities'
-                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail Trade'
+                    WHEN derived_NAICS BETWEEN '44' AND '45' THEN 'Retail and Groceries'
                     WHEN derived_NAICS = '52' THEN 'Finance and Insurance'
                     WHEN derived_NAICS IN ('54', '81', '91') THEN 'Professional Services'
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
@@ -167,17 +167,24 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 def save_transactions(statement_df, statement_fname):
-    categories = [
-        'Online Banking Transfer',
-        'Contactless Interac Refund',
-        'ATM Transaction',
-        'E-Transfer',
-        'Insurance',
-        'Payroll Deposit',
-        'Online Transfer to Deposit Account',
-        'Misc Payment',
-        'Deposit',
-        'Cheque'
+    withdrawals = [
+        "E-TRANSFER SENT",
+        "E-TRANSFER REQUEST FULFILLED",
+        "ATM WITHDRAWAL",
+        "ATM TRANSFER TO DEPOSIT ACCT",
+        "ONLINE TRANSFER TO DEPOSIT ACCOUNT"
+    ]
+
+    deposits = [
+        "E-TRANSFER - AUTODEPOSIT RECIPIENT",
+        "E-TRANSFER RECEIVED",
+        "E-TRANSFER - REQUEST MONEY",
+        "DEPOSIT",
+        "PAYROLL DEPOSIT",
+        "ATM DEPOSIT",
+        "ONLINE BANKING TRANSFER",
+        "MOBILE CHEQUE DEPOSIT",
+        "INSURANCE CPL:"
     ]
 
     purchases_and_refunds = ["CONTACTLESS INTERAC PURCHASE",
@@ -189,29 +196,29 @@ def save_transactions(statement_df, statement_fname):
                          "INTERAC TRANSIT"
                          ]
     
-    non_merchant_categories = categories + purchases_and_refunds
+    non_merchant_categories = withdrawals + deposits + purchases_and_refunds
 
     provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
     cities = input("City (separate with ', ' if multiple): ").strip()
 
     statement_df["Transaction Date"] = statement_df["Transaction Date"].dt.date
 
-    cat_pattern = '|'.join(re.escape(cat) for cat in categories) # re.escape to allow special chars
+    withdrawal_pattern = '|'.join(withdrawals)
+    deposit_pattern = '|'.join(deposits)
     pr_pattern = '|'.join(purchases_and_refunds)
     non_merchant_pattern = '|'.join(non_merchant_categories)
 
-    cat_mask = statement_df["Description 1"].str.contains(cat_pattern, na=False, case=False)
+    withdrawal_mask = statement_df["Description 1"].str.contains(withdrawal_pattern)
+    deposit_mask = statement_df["Description 1"].str.contains(deposit_pattern)
     pr_mask = statement_df["Description 1"].str.contains(pr_pattern)
     non_merchant_mask = ~statement_df["Description 1"].str.contains(non_merchant_pattern, na=False, case=False)
 
-    # if one of the categories are in Desc1, find the matching category name and set as Category
-    if cat_mask.any():
-        def find_category(desc):
-            for cat in categories:
-                if re.search(re.escape(cat), desc, re.IGNORECASE):
-                    return cat
-            return None
-        statement_df.loc[cat_mask, "Category"] = statement_df.loc[cat_mask, "Description 1"].apply(find_category)
+    # if a withdrawal or deposit is in Desc1, set that as the Category (withdrawals applied last to take priority over deposit substring matches)
+    if deposit_mask.any():
+        statement_df.loc[deposit_mask, "Category"] = "Deposit"
+
+    if withdrawal_mask.any():
+        statement_df.loc[withdrawal_mask, "Category"] = "Withdrawal"
 
     # use categorize_merchants() to find NAIC code for merchants whose Desc1 not in other_categories
     if pr_mask.any():
