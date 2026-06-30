@@ -2,6 +2,7 @@ import pandas as pd
 # import plot_graphs
 import sqlite3
 import re
+import io
 
 
 def categorize_merchants(merchant_name, provinces, cities):
@@ -166,7 +167,7 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 
-def save_transactions(statement_df, statement_fname):
+def save_transactions(statement_df, statement_fname, provinces="", cities="", return_bytes=False):
     withdrawals = [
         "E-TRANSFER SENT",
         "E-TRANSFER REQUEST FULFILLED",
@@ -195,11 +196,8 @@ def save_transactions(statement_df, statement_fname):
                          "INTERAC PURCHASE",
                          "INTERAC TRANSIT"
                          ]
-    
-    non_merchant_categories = withdrawals + deposits + purchases_and_refunds
 
-    provinces = input("\nProvince (separate with ', ' if multiple): ").strip()
-    cities = input("City (separate with ', ' if multiple): ").strip()
+    non_merchant_categories = withdrawals + deposits + purchases_and_refunds
 
     statement_df["Transaction Date"] = statement_df["Transaction Date"].dt.date
 
@@ -232,49 +230,49 @@ def save_transactions(statement_df, statement_fname):
         statement_df.loc[non_merchant_mask, "Category"] = "Other"
 
 
-
-    # Write categorized transactions to excel
-    with pd.ExcelWriter(f"{statement_fname}_analyzed.xlsx", engine="openpyxl") as writer:
+    def _write_sheets(writer):
         statement_df.to_excel(writer, sheet_name="All Transactions", index=False)
-
         for category, group_df in statement_df.groupby("Category"):
             sheet_name = re.sub(r'[\\/*?:\[\]]', '', str(category))[:31] # strip forbidden characters (\ / * ? : [ ]) for sheet names and truncate name to 31 characters max
-            
             total_row = {col: None for col in group_df.columns}
             total_row["Description 2"] = "TOTAL"
             total_row["CAD$"] = group_df["CAD$"].sum()
-
             group_df = pd.concat([group_df, pd.DataFrame([total_row])], ignore_index=True) # add total row to bottom of the group_df
-
             group_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
+    if return_bytes:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            _write_sheets(writer)
+        return buffer.getvalue()
+
+    with pd.ExcelWriter(f"{statement_fname}_analyzed.xlsx", engine="openpyxl") as writer:
+        _write_sheets(writer)
     print(f"\nSuccessfully wrote dataframe to {statement_fname}_analyzed.xlsx")
 
-
-    # Save categorized transactions to db
     conn = sqlite3.connect('transactions.db')
     statement_df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
     print("Successfully saved transactions to transactions.db\n")
-
-
     conn.close()
     
 
 
-def analyze_transactions(statement_df, start_date, end_date):
+def analyze_transactions(statement_df, start_date, end_date, interactive=True):
     """
-    Iterate each transaction in statement_df and sum and print all debits, credits, and create list of all transactions $50 or above.
-    Plot transactions graph with stars on flagged purchases >= $50 using plot_graphs() from plot_graphs module.
+    Summarize debits and credits. In interactive mode, prompts for fraud flagging thresholds
+    and prints results. In non-interactive mode, returns a dict with totals (no DB access).
     """
+    if not interactive:
+        total_debits = abs(statement_df[statement_df["CAD$"] < 0]["CAD$"].sum())
+        total_credits = statement_df[statement_df["CAD$"] > 0]["CAD$"].sum()
+        return {"total_debits": total_debits, "total_credits": total_credits}
+
     total_debits = 0
     total_credits = 0
- 
-    # Connect to transactions.db
+
     conn = sqlite3.connect('transactions.db')
     cursor = conn.cursor()
 
-
-    # Debit transaction flagging user inputs
     enable_flagging = input("\nEnable debit transaction flagging to catch fraud? Flag transactions that are ABOVE or BELOW a certain amount (Y/N): ")
     if enable_flagging == 'Y':
         print("\nType any NON-NUMERICAL character to skip a limit.")
@@ -289,16 +287,12 @@ def analyze_transactions(statement_df, start_date, end_date):
     elif enable_flagging == 'N':
         upper_limit = statement_df['CAD$'].min() - 0.01
         lower_limit = 0
-        
-    
-    # Summary
+
     total_debits = cursor.execute('SELECT SUM("CAD$") FROM transactions WHERE "CAD$" < 0').fetchone()[0]
     total_credits = cursor.execute('SELECT SUM("CAD$") FROM transactions WHERE "CAD$" > 0').fetchone()[0]
     print(f"The total debits from {start_date.date()} to {end_date.date()} is ${-total_debits}")
     print(f"The total credits from {start_date.date()} to {end_date.date()} is ${total_credits}")
 
-
-    # Flag transactions queries
     flagged_above_query = '''
         SELECT id, "Transaction Date", "Description 1", "Description 2", "CAD$"
         FROM transactions
@@ -332,27 +326,27 @@ def analyze_transactions(statement_df, start_date, end_date):
         else:
             print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} purchased from {row[3]} for ${-row[4]}")
 
-
-
     # PLOT GRAPHS ------------------------------------------------------------------
     # plot_graphs.plot_graphs(statement_df, start_date, end_date, debits_by_date, credits_by_date) # disable until fixed with new flagging system
-
 
     conn.close()
 
 
 
-def categorize_spending():
+def categorize_spending(df=None):
+    if df is not None:
+        debit_mask = df["CAD$"] < 0
+        grouped = df[debit_mask].groupby("Category")["CAD$"].sum()
+        return {cat: abs(val) for cat, val in grouped.items()}
+
     conn = sqlite3.connect('transactions.db')
     cursor = conn.cursor()
 
-    # Find distinct categories that have DEBIT transactions
     cursor.execute('SELECT Category, SUM("CAD$") FROM transactions WHERE "CAD$" < 0 GROUP BY Category')
     categories = cursor.fetchall()
-    
+
     categorized_spending = {rows[0]: "$" + str(-rows[1]) for rows in categories}
     print("\nThis is a categorized breakdown of your DEBIT transactions:\n")
     print(categorized_spending)
-
 
     conn.close()
