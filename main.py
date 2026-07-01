@@ -101,6 +101,7 @@ def process_statement(csv_file, start_date, end_date, provinces, cities):
     Returns (df, insights, excel_bytes).
     """
     statement_df = pd.read_csv(csv_file)
+    statement_df = statement_df.drop(columns=["Cheque Number", "USD$"], errors="ignore")
 
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
@@ -128,6 +129,7 @@ if __name__ == "__main__":
     statement_file = input("Enter the name of the statement: ")
     statement_name = statement_file.rsplit('.', 1)[0]
     statement_df = pd.read_csv(statement_file)
+    statement_df = statement_df.drop(columns=["Cheque Number", "USD$"], errors="ignore")
 
     print("Enter a custom statement range or press 'Enter' to use the end ranges.")
 
