@@ -44,28 +44,34 @@ if "df" in st.session_state:
 
     st.divider()
 
-    # Summary metrics
-    m1, m2 = st.columns(2)
-    m1.metric("Total Debits", f"${insights['total_debits']:,.2f}")
-    m2.metric("Total Credits", f"${insights['total_credits']:,.2f}")
+    # Account + totals summary row
+    acct_col, debit_col, credit_col = st.columns(3)
+    with acct_col:
+        st.metric(insights["account_type"], insights["account_number"])
+    with debit_col:
+        st.metric("Total Debits", f"${insights['total_debits']:,.2f}")
+    with credit_col:
+        st.metric("Total Credits", f"${insights['total_credits']:,.2f}")
 
     st.divider()
 
-    # Category breakdown + download side by side
-    left, right = st.columns([2, 1])
+    # Spending by Category
+    st.subheader("Spending by Category")
+    breakdown = insights["category_breakdown"]
+    breakdown_df = pd.DataFrame(
+        sorted(breakdown.items(), key=lambda x: -x[1]),
+        columns=["Category", "Total Spent (CAD$)"]
+    )
+    breakdown_df["Total Spent (CAD$)"] = breakdown_df["Total Spent (CAD$)"].map("${:,.2f}".format)
+    st.table(breakdown_df)
 
-    with left:
-        st.subheader("Spending by Category")
-        breakdown = insights["category_breakdown"]
-        breakdown_df = pd.DataFrame(
-            sorted(breakdown.items(), key=lambda x: -x[1]),
-            columns=["Category", "Total Spent (CAD$)"]
-        )
-        breakdown_df["Total Spent (CAD$)"] = breakdown_df["Total Spent (CAD$)"].map("${:,.2f}".format)
-        st.table(breakdown_df)
+    st.divider()
 
-    with right:
-        st.subheader("Export")
+    # All Transactions header + download button on the far right
+    header_col, export_col = st.columns([5, 1], vertical_alignment="center")
+    with header_col:
+        st.subheader("All Transactions")
+    with export_col:
         st.download_button(
             label="Download Analyzed Excel",
             data=excel_bytes,
@@ -75,8 +81,4 @@ if "df" in st.session_state:
             use_container_width=True,
         )
 
-    st.divider()
-
-    # All Transactions table
-    st.subheader("All Transactions")
     st.dataframe(df, use_container_width=True, hide_index=True)
