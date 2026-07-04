@@ -21,7 +21,7 @@ def categorize_merchants(merchant_name, provinces, cities):
     filler_words = ["THE", "OF", "LTD", "STORE", "WHOLESALE"]
 
     if not isinstance(merchant_name, str): # if merchant is not a string, skip to next merchant
-        return "N/A" # return N/A for NAIC category
+        return "Other" # return 'Other' for NAIC category
 
     # turn merchant all uppercase, replace non-letters with space, get rid of whitespace
     clean_name = re.sub(r"[^A-Z\s]", '', merchant_name.upper()).strip()
@@ -30,7 +30,7 @@ def categorize_merchants(merchant_name, provinces, cities):
     split_name = [word for word in clean_name.split() if word and word not in filler_words and len(word) > 1]
 
     if not split_name: # if split_name is empty, skip to next merchant
-        return "N/A"
+        return "Other"
     
 
     # build parameterized SQL per-merchant; try stricter AND-match first, then OR-match. =========================================
@@ -64,7 +64,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
                     WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
                     WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
-                    ELSE 'N/A'
+                    ELSE 'Other'
                 END AS merchant_category,
                 NAIC_count
             FROM (
@@ -90,7 +90,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     NAIC_count DESC
             ) sub2
         ) sub3
-        WHERE merchant_category != 'N/A'
+        WHERE merchant_category != 'Other'
         ORDER BY NAIC_count DESC
         LIMIT 1
     """
@@ -109,7 +109,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
                     WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
                     WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
-                    ELSE 'N/A'
+                    ELSE 'Other'
                 END AS merchant_category,
                 NAIC_count
             FROM (
@@ -135,7 +135,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     NAIC_count DESC
             ) sub2
         ) sub3
-        WHERE merchant_category != 'N/A'
+        WHERE merchant_category != 'Other'
         ORDER BY NAIC_count DESC
         LIMIT 1
     """
@@ -162,8 +162,8 @@ def categorize_merchants(merchant_name, provinces, cities):
     
     conn.close()
 
-    # if no NAIC category found, return N/A
-    return "N/A"
+    # if no NAIC category found, return 'Other'
+    return "Other"
 
 
 
