@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from main import process_statement
+import charts
 
 st.set_page_config(page_title="Financial Analyzer", layout="wide")
 st.title("Financial Statement Analyzer")
@@ -82,3 +83,10 @@ if "df" in st.session_state:
         )
 
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    chart_col, reserved_col = st.columns(2)
+    with chart_col:
+        fig = charts.build_category_pie_chart(insights["category_breakdown"], st.context.theme.type)
+        st.plotly_chart(fig, use_container_width=True)
