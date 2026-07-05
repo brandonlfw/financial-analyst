@@ -3,15 +3,26 @@ import pandas as pd
 from main import process_statement
 import charts
 
-st.set_page_config(page_title="Financial Analyzer", layout="wide")
-st.title("Financial Statement Analyzer")
+st.set_page_config(page_title="RBC Financial Analyzer", layout="wide")
+st.title("RBC Financial Statement Analyzer")
 
 # INPUTS
 uploaded_file = st.file_uploader("Upload RBC Statement CSV", type="csv")
 
+if uploaded_file is not None and st.session_state.get("last_uploaded_file_id") != uploaded_file.file_id:
+    try:
+        tx_dates = pd.to_datetime(pd.read_csv(uploaded_file, usecols=["Transaction Date"])["Transaction Date"])
+        st.session_state["start_date"] = tx_dates.min().date()
+        st.session_state["end_date"] = tx_dates.max().date()
+    except (KeyError, ValueError):
+        st.warning("Couldn't read transaction dates from this file to auto-fill the date range.")
+    finally:
+        uploaded_file.seek(0)
+        st.session_state["last_uploaded_file_id"] = uploaded_file.file_id
+
 col1, col2 = st.columns(2)
-start_date = col1.date_input("Start Date")
-end_date = col2.date_input("End Date")
+start_date = col1.date_input("Start Date", key="start_date")
+end_date = col2.date_input("End Date", key="end_date")
 
 provinces = st.text_input("Provinces (comma-separated)", placeholder="ON, BC")
 cities = st.text_input("Cities (comma-separated)", placeholder="Toronto, Vancouver")
@@ -88,5 +99,7 @@ if "df" in st.session_state:
 
     chart_col, reserved_col = st.columns(2)
     with chart_col:
+        st.header("Pie Chart of Spending")
+
         fig = charts.build_category_pie_chart(insights["category_breakdown"], st.context.theme.type)
         st.plotly_chart(fig, use_container_width=True)
