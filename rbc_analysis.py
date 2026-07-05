@@ -21,7 +21,7 @@ def categorize_merchants(merchant_name, provinces, cities):
     filler_words = ["THE", "OF", "LTD", "STORE", "WHOLESALE"]
 
     if not isinstance(merchant_name, str): # if merchant is not a string, skip to next merchant
-        return "Other"
+        return "Other" # return 'Other' for NAIC category
 
     # turn merchant all uppercase, replace non-letters with space, get rid of whitespace
     clean_name = re.sub(r"[^A-Z\s]", '', merchant_name.upper()).strip()
@@ -64,7 +64,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
                     WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
                     WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
-                    ELSE 'N/A'
+                    ELSE 'Other'
                 END AS merchant_category,
                 NAIC_count
             FROM (
@@ -90,7 +90,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     NAIC_count DESC
             ) sub2
         ) sub3
-        WHERE merchant_category != 'N/A'
+        WHERE merchant_category != 'Other'
         ORDER BY NAIC_count DESC
         LIMIT 1
     """
@@ -109,7 +109,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     WHEN derived_NAICS = '62' THEN 'Healthcare'
                     WHEN derived_NAICS = '71' THEN 'Entertainment and Recreation'
                     WHEN derived_NAICS = '72' THEN 'Accommodation and Food Services'
-                    ELSE 'N/A'
+                    ELSE 'Other'
                 END AS merchant_category,
                 NAIC_count
             FROM (
@@ -135,7 +135,7 @@ def categorize_merchants(merchant_name, provinces, cities):
                     NAIC_count DESC
             ) sub2
         ) sub3
-        WHERE merchant_category != 'N/A'
+        WHERE merchant_category != 'Other'
         ORDER BY NAIC_count DESC
         LIMIT 1
     """
@@ -162,6 +162,7 @@ def categorize_merchants(merchant_name, provinces, cities):
     
     conn.close()
 
+    # if no NAIC category found, return 'Other'
     return "Other"
 
 
@@ -223,12 +224,10 @@ def save_transactions(statement_df, statement_fname, provinces="", cities="", re
             lambda row: categorize_merchants(row["Description 2"], provinces, cities), axis=1
         )
 
-    # Try finding the NAIC code for transactions that do not fall under withdrawals, deposits, or purchases/refunds
+    # if Desc1 is not a category or a purchase/refund, set its Category to "Other"
     if non_merchant_mask.any():
         statement_df.loc[non_merchant_mask, "Description 2"] = statement_df.loc[non_merchant_mask, "Description 1"]
-        statement_df.loc[non_merchant_mask, "Category"] = statement_df.loc[non_merchant_mask].apply(
-            lambda row: categorize_merchants(row["Description 2"], provinces, cities), axis=1
-        )
+        statement_df.loc[non_merchant_mask, "Category"] = "Other"
 
 
     def _write_sheets(writer):

@@ -1,16 +1,28 @@
 import streamlit as st
 import pandas as pd
 from main import process_statement
+import charts
 
-st.set_page_config(page_title="Financial Analyzer", layout="wide")
-st.title("Financial Statement Analyzer")
+st.set_page_config(page_title="RBC Financial Analyzer", layout="wide")
+st.title("RBC Financial Statement Analyzer")
 
 # INPUTS
 uploaded_file = st.file_uploader("Upload RBC Statement CSV", type="csv")
 
+if uploaded_file is not None and st.session_state.get("last_uploaded_file_id") != uploaded_file.file_id:
+    try:
+        tx_dates = pd.to_datetime(pd.read_csv(uploaded_file, usecols=["Transaction Date"])["Transaction Date"])
+        st.session_state["start_date"] = tx_dates.min().date()
+        st.session_state["end_date"] = tx_dates.max().date()
+    except (KeyError, ValueError):
+        st.warning("Couldn't read transaction dates from this file to auto-fill the date range.")
+    finally:
+        uploaded_file.seek(0)
+        st.session_state["last_uploaded_file_id"] = uploaded_file.file_id
+
 col1, col2 = st.columns(2)
-start_date = col1.date_input("Start Date")
-end_date = col2.date_input("End Date")
+start_date = col1.date_input("Start Date", key="start_date")
+end_date = col2.date_input("End Date", key="end_date")
 
 provinces = st.text_input("Provinces (comma-separated)", placeholder="ON, BC")
 cities = st.text_input("Cities (comma-separated)", placeholder="Toronto, Vancouver")
@@ -44,28 +56,34 @@ if "df" in st.session_state:
 
     st.divider()
 
-    # Summary metrics
-    m1, m2 = st.columns(2)
-    m1.metric("Total Debits", f"${insights['total_debits']:,.2f}")
-    m2.metric("Total Credits", f"${insights['total_credits']:,.2f}")
+    # Account + totals summary row
+    acct_col, debit_col, credit_col = st.columns(3)
+    with acct_col:
+        st.metric(insights["account_type"], insights["account_number"])
+    with debit_col:
+        st.metric("Total Debits", f"${insights['total_debits']:,.2f}")
+    with credit_col:
+        st.metric("Total Credits", f"${insights['total_credits']:,.2f}")
 
     st.divider()
 
-    # Category breakdown + download side by side
-    left, right = st.columns([2, 1])
+    # Spending by Category
+    st.subheader("Spending by Category")
+    breakdown = insights["category_breakdown"]
+    breakdown_df = pd.DataFrame(
+        sorted(breakdown.items(), key=lambda x: -x[1]),
+        columns=["Category", "Total Spent (CAD$)"]
+    )
+    breakdown_df["Total Spent (CAD$)"] = breakdown_df["Total Spent (CAD$)"].map("${:,.2f}".format)
+    st.table(breakdown_df)
 
-    with left:
-        st.subheader("Spending by Category")
-        breakdown = insights["category_breakdown"]
-        breakdown_df = pd.DataFrame(
-            sorted(breakdown.items(), key=lambda x: -x[1]),
-            columns=["Category", "Total Spent (CAD$)"]
-        )
-        breakdown_df["Total Spent (CAD$)"] = breakdown_df["Total Spent (CAD$)"].map("${:,.2f}".format)
-        st.table(breakdown_df)
+    st.divider()
 
-    with right:
-        st.subheader("Export")
+    # All Transactions header + download button on the far right
+    header_col, export_col = st.columns([5, 1], vertical_alignment="center")
+    with header_col:
+        st.subheader("All Transactions")
+    with export_col:
         st.download_button(
             label="Download Analyzed Excel",
             data=excel_bytes,
@@ -75,8 +93,13 @@ if "df" in st.session_state:
             use_container_width=True,
         )
 
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
     st.divider()
 
-    # All Transactions table
-    st.subheader("All Transactions")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    chart_col, reserved_col = st.columns(2)
+    with chart_col:
+        st.header("Pie Chart of Spending")
+
+        fig = charts.build_category_pie_chart(insights["category_breakdown"], st.context.theme.type)
+        st.plotly_chart(fig, use_container_width=True)
