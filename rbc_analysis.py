@@ -149,7 +149,6 @@ def categorize_merchants(merchant_name, provinces, cities):
 
     if row is not None:
         # return the NAIC category
-        # print(f"{merchant_name} NAIC code is {row[0]}")
         return row[0]
     else:
         # Attempt B: any word present (OR between pair_clauses) if no rows found
@@ -157,7 +156,6 @@ def categorize_merchants(merchant_name, provinces, cities):
         row = cursor.fetchone()
         if row is not None:
             # return the NAIC category
-            # print(f"{merchant_name} NAIC code is {row[0]}")
             return row[0]
     
     conn.close()
@@ -167,7 +165,14 @@ def categorize_merchants(merchant_name, provinces, cities):
 
 
 
-def save_transactions(statement_df, statement_fname, provinces="", cities="", return_bytes=False):
+def categorize_transactions(statement_df, provinces="", cities=""):
+    """
+    Assigns the Category column for every row in statement_df based on Description 1
+    patterns (withdrawal/deposit/purchase-refund) and, for purchases/refunds, a NAIC
+    merchant lookup via categorize_merchants(). Mutates statement_df in place. This
+    should only be run once per statement (at initial analysis) since re-running it
+    would overwrite any categories a user has manually corrected afterward.
+    """
     withdrawals = [
         "E-TRANSFER SENT",
         "E-TRANSFER REQUEST FULFILLED",
@@ -230,7 +235,15 @@ def save_transactions(statement_df, statement_fname, provinces="", cities="", re
         statement_df.loc[non_merchant_mask, "Category"] = "Other"
 
 
-    def _write_sheets(writer):
+def build_excel_bytes(statement_df):
+    """
+    Serializes the already-categorized statement_df into the analyzed .xlsx layout
+    (an "All Transactions" sheet plus one sheet per Category with a TOTAL row) and
+    returns the bytes. Pure serialization of in-memory data - safe/cheap to call
+    again after a manual category edit.
+    """
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         statement_df.to_excel(writer, sheet_name="All Transactions", index=False)
         for category, group_df in statement_df.groupby("Category"):
             sheet_name = re.sub(r'[\\/*?:\[\]]', '', str(category))[:31] # strip forbidden characters (\ / * ? : [ ]) for sheet names and truncate name to 31 characters max
@@ -239,22 +252,43 @@ def save_transactions(statement_df, statement_fname, provinces="", cities="", re
             total_row["CAD$"] = group_df["CAD$"].sum()
             group_df = pd.concat([group_df, pd.DataFrame([total_row])], ignore_index=True) # add total row to bottom of the group_df
             group_df.to_excel(writer, sheet_name=sheet_name, index=False)
+    return buffer.getvalue()
+
+
+def save_transactions_to_db(statement_df, db_path="transactions.db"):
+    conn = sqlite3.connect(db_path)
+    statement_df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
+    conn.close()
+
+
+def update_transaction_category(row_id, new_category):
+    """
+    Applies a single manually-edited Category value to transactions.db without
+    touching any other row (unlike save_transactions_to_db's full-table replace).
+    row_id is the statement_df's pandas index value, matching the 'id' column
+    written by save_transactions_to_db's index_label='id'.
+    """
+    conn = sqlite3.connect("transactions.db")
+    conn.execute('UPDATE transactions SET Category = ? WHERE id = ?', (new_category, int(row_id)))
+    conn.commit()
+    conn.close()
+
+
+def save_transactions(statement_df, statement_fname, provinces="", cities="", return_bytes=False):
+    categorize_transactions(statement_df, provinces, cities)
+    excel_bytes = build_excel_bytes(statement_df)
 
     if return_bytes:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            _write_sheets(writer)
-        return buffer.getvalue()
+        save_transactions_to_db(statement_df)
+        return excel_bytes
 
-    with pd.ExcelWriter(f"{statement_fname}_analyzed.xlsx", engine="openpyxl") as writer:
-        _write_sheets(writer)
+    with open(f"{statement_fname}_analyzed.xlsx", "wb") as f:
+        f.write(excel_bytes)
     print(f"\nSuccessfully wrote dataframe to {statement_fname}_analyzed.xlsx")
 
-    conn = sqlite3.connect('transactions.db')
-    statement_df.to_sql('transactions', conn, if_exists='replace', index=True, index_label='id')
+    save_transactions_to_db(statement_df)
     print("Successfully saved transactions to transactions.db\n")
-    conn.close()
-    
+
 
 
 def analyze_transactions(statement_df, start_date, end_date, interactive=True):
@@ -325,9 +359,6 @@ def analyze_transactions(statement_df, start_date, end_date, interactive=True):
             print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} recieved from {row[3]} for ${-row[4]}")
         else:
             print(f"CSV Index {row[0] + 2} on {row[1]}: {row[2]} purchased from {row[3]} for ${-row[4]}")
-
-    # PLOT GRAPHS ------------------------------------------------------------------
-    # plot_graphs.plot_graphs(statement_df, start_date, end_date, debits_by_date, credits_by_date) # disable until fixed with new flagging system
 
     conn.close()
 

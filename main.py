@@ -121,7 +121,9 @@ def process_statement(csv_file, start_date, end_date, provinces, cities):
     prov_str = ", ".join(p.strip() for p in provinces if p.strip())
     city_str = ", ".join(c.strip() for c in cities if c.strip())
 
-    excel_bytes = rbc_analysis.save_transactions(statement_df, "output", prov_str, city_str, return_bytes=True)
+    rbc_analysis.categorize_transactions(statement_df, prov_str, city_str)
+    rbc_analysis.save_transactions_to_db(statement_df)
+    excel_bytes = rbc_analysis.build_excel_bytes(statement_df)
 
     insights = rbc_analysis.analyze_transactions(statement_df, start_dt, end_dt, interactive=False)
     insights["category_breakdown"] = rbc_analysis.categorize_spending(df=statement_df)

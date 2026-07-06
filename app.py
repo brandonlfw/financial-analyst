@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from main import process_statement
 import charts
+import rbc_analysis
+
+NEW_CATEGORY_SENTINEL = "+ New category..."
 
 st.set_page_config(page_title="RBC Financial Analyzer", layout="wide")
 st.title("RBC Financial Statement Analyzer")
@@ -93,7 +96,46 @@ if "df" in st.session_state:
             use_container_width=True,
         )
 
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    categories = sorted(df["Category"].dropna().unique().tolist())
+
+    edited = st.data_editor(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        key="tx_editor",
+        column_config={
+            "Category": st.column_config.SelectboxColumn(
+                "Category", options=categories + [NEW_CATEGORY_SENTINEL]
+            )
+        },
+        disabled=[c for c in df.columns if c != "Category"],
+    )
+
+    category_changed = False
+    for row_pos, changes in st.session_state["tx_editor"]["edited_rows"].items():
+        if "Category" not in changes:
+            continue
+        row_id = df.index[row_pos]
+        new_val = changes["Category"]
+        if new_val == NEW_CATEGORY_SENTINEL:
+            custom = st.text_input(f"New category for row {row_id}", key=f"custom_cat_{row_id}")
+            if not custom:
+                continue
+            new_val = custom
+        if df.at[row_id, "Category"] == new_val:
+            continue
+        df.at[row_id, "Category"] = new_val
+        rbc_analysis.update_transaction_category(row_id, new_val)
+        insights["category_breakdown"] = rbc_analysis.categorize_spending(df=df)
+        st.session_state["excel_bytes"] = rbc_analysis.build_excel_bytes(df)
+        category_changed = True
+
+    st.session_state["df"] = df
+
+    # "Spending by Category" was already rendered above with the pre-edit breakdown;
+    # force one more rerun so it (and the pie chart) reflect the update immediately.
+    if category_changed:
+        st.rerun()
 
     st.divider()
 
