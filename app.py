@@ -127,6 +127,7 @@ if "df" in st.session_state:
     display_df = df.copy()
     for row_id, new_val in pending_categories.items():
         display_df.at[row_id, "Category"] = new_val
+    display_df.insert(0, "#", range(1, len(display_df) + 1))
 
     highlighted_rows = set(pending_categories) | set(awaiting_custom_rows)
     styler = display_df.style.apply(
@@ -146,7 +147,7 @@ if "df" in st.session_state:
                 "Category", options=categories + custom_options + [NEW_CATEGORY_SENTINEL]
             )
         },
-        disabled=[c for c in df.columns if c != "Category"],
+        disabled=[c for c in display_df.columns if c != "Category"],
     )
 
     for row_id in awaiting_custom_rows:
