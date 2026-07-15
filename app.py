@@ -97,45 +97,78 @@ if "df" in st.session_state:
         )
 
     categories = sorted(df["Category"].dropna().unique().tolist())
+    pending_categories = st.session_state.setdefault("pending_categories", {})
 
-    edited = st.data_editor(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        key="tx_editor",
-        column_config={
-            "Category": st.column_config.SelectboxColumn(
-                "Category", options=categories + [NEW_CATEGORY_SENTINEL]
-            )
-        },
-        disabled=[c for c in df.columns if c != "Category"],
-    )
+    edited_rows = st.session_state.get("tx_editor", {}).get("edited_rows", {})
+    awaiting_custom_rows = []
+    needs_reset = False
 
-    category_changed = False
-    for row_pos, changes in st.session_state["tx_editor"]["edited_rows"].items():
+    for row_pos, changes in edited_rows.items():
         if "Category" not in changes:
             continue
         row_id = df.index[row_pos]
         new_val = changes["Category"]
         if new_val == NEW_CATEGORY_SENTINEL:
-            custom = st.text_input(f"New category for row {row_id}", key=f"custom_cat_{row_id}")
+            custom = st.session_state.get(f"custom_cat_{row_id}", "")
             if not custom:
+                awaiting_custom_rows.append(row_id)
                 continue
             new_val = custom
+            needs_reset = True
         if df.at[row_id, "Category"] == new_val:
-            continue
-        df.at[row_id, "Category"] = new_val
-        rbc_analysis.update_transaction_category(row_id, new_val)
-        insights["category_breakdown"] = rbc_analysis.categorize_spending(df=df)
-        st.session_state["excel_bytes"] = rbc_analysis.build_excel_bytes(df)
-        category_changed = True
+            pending_categories.pop(row_id, None)
+        else:
+            pending_categories[row_id] = new_val
 
-    st.session_state["df"] = df
-
-    # "Spending by Category" was already rendered above with the pre-edit breakdown;
-    # force one more rerun so it (and the pie chart) reflect the update immediately.
-    if category_changed:
+    if needs_reset:
+        del st.session_state["tx_editor"]
         st.rerun()
+
+    display_df = df.copy()
+    for row_id, new_val in pending_categories.items():
+        display_df.at[row_id, "Category"] = new_val
+
+    highlighted_rows = set(pending_categories) | set(awaiting_custom_rows)
+    styler = display_df.style.apply(
+        lambda row: ["background-color: #e6b400" if row.name in highlighted_rows else "" for _ in row],
+        axis=1,
+    )
+
+    custom_options = sorted(v for v in set(pending_categories.values()) if v not in categories)
+
+    edited = st.data_editor(
+        styler,
+        use_container_width=True,
+        hide_index=True,
+        key="tx_editor",
+        column_config={
+            "Category": st.column_config.SelectboxColumn(
+                "Category", options=categories + custom_options + [NEW_CATEGORY_SENTINEL]
+            )
+        },
+        disabled=[c for c in df.columns if c != "Category"],
+    )
+
+    for row_id in awaiting_custom_rows:
+        st.text_input(f"New category for row {row_id}", key=f"custom_cat_{row_id}")
+
+    _, save_col = st.columns([5, 1])
+    with save_col:
+        if st.button(
+            "Save Changes",
+            type="primary",
+            use_container_width=True,
+            disabled=not pending_categories,
+        ):
+            for row_id, new_val in pending_categories.items():
+                df.at[row_id, "Category"] = new_val
+                rbc_analysis.update_transaction_category(row_id, new_val)
+            insights["category_breakdown"] = rbc_analysis.categorize_spending(df=df)
+            st.session_state["excel_bytes"] = rbc_analysis.build_excel_bytes(df)
+            st.session_state["df"] = df
+            st.session_state["pending_categories"] = {}
+            del st.session_state["tx_editor"]
+            st.rerun()
 
     st.divider()
 
