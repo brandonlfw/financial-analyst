@@ -97,16 +97,17 @@ if "df" in st.session_state:
         )
 
     categories = sorted(df["Category"].dropna().unique().tolist())
-    pending_categories = st.session_state.setdefault("pending_categories", {})
+    pending_categories = st.session_state.setdefault("pending_categories", {}) # tracks all unsaved changes
 
-    edited_rows = st.session_state.get("tx_editor", {}).get("edited_rows", {})
+    edited_rows = st.session_state.get("tx_editor", {}).get("edited_rows", {}) # ex. {0: {"Category": "Groceries"}} where 0 is the row position in the visible table
     awaiting_custom_rows = []
     needs_reset = False
 
-    for row_pos, changes in edited_rows.items():
-        if "Category" not in changes:
+    for row_pos, changes in edited_rows.items(): # loop thru every row that user changed in the table
+        if "Category" not in changes: # skip if a non-category was editted
             continue
-        row_id = df.index[row_pos]
+
+        row_id = df.index[row_pos] # get the actual pd table row id from the visible table
         new_val = changes["Category"]
         if new_val == NEW_CATEGORY_SENTINEL:
             custom = st.session_state.get(f"custom_cat_{row_id}", "")
@@ -115,10 +116,30 @@ if "df" in st.session_state:
                 continue
             new_val = custom
             needs_reset = True
-        if df.at[row_id, "Category"] == new_val:
+
+        # Check if user made a real category change or just picked the same category
+        if df.at[row_id, "Category"] == new_val: # Undo an edit if the category selected is the same as the original in df
             pending_categories.pop(row_id, None)
-        else:
+        else: # Make a new edit if category selected is DIFFERENT than the original in df
             pending_categories[row_id] = new_val
+
+            # FOR SAME MERCHANT POPUP - Find other rows that have this merchant but don't have this new category
+            merchant_name = df.at[row_id, "Description 2"]
+            same_merchant_df = df.loc[
+                (df['Description 2'] == merchant_name) &
+                (df['Category'] != new_val)
+            ]
+
+            # If there exists rows with the same merchant, save to session_state
+            if not same_merchant_df.empty:
+                st.session_state['merchant_prompt'] = {
+                    "merchant": merchant_name,
+                    "category": new_val,
+                    "target_id_rows": same_merchant_df.index.tolist(),
+                    "total_count": len(same_merchant_df)
+                }
+                print(f"Saved same merchant prompt to session_state: {st.session_state['merchant_prompt']}")
+
 
     if needs_reset:
         del st.session_state["tx_editor"]
