@@ -6,6 +6,37 @@ import rbc_analysis
 
 NEW_CATEGORY_SENTINEL = "+ New category..."
 
+@st.dialog("Update Matching Transactions")
+def same_merchant_popup(merchant_prompt):
+    merchant = merchant_prompt["merchant"]
+    category = merchant_prompt["category"]
+    count = merchant_prompt["total_count"]
+
+    st.write(
+        f"Merchant **{merchant}** appears in **{count}** other row(s). "
+        f"Would you like to change all of them to **{category}**?"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1: # Accept changes button
+        if st.button("Update All", type="primary", use_container_width=True):
+            for row_id in merchant_prompt["target_id_rows"]:
+                st.session_state["pending_categories"][row_id] = category
+
+            # Clear prompt so it does not open again
+            del st.session_state["merchant_prompt"]
+
+            # Clear tx_editor cache so All Transactions table refreshes with the new yellow highlights for the updated rows
+            st.session_state.pop("tx_editor", None)
+            st.rerun()
+
+    with col2: # Decline button, clear prompt
+        if st.button("Keep Only This One", use_container_width=True):
+            del st.session_state["merchant_prompt"]
+            st.rerun()
+
+
 st.set_page_config(page_title="RBC Financial Analyzer", layout="wide")
 st.title("RBC Financial Statement Analyzer")
 
@@ -123,11 +154,11 @@ if "df" in st.session_state:
         else: # Make a new edit if category selected is DIFFERENT than the original in df
             pending_categories[row_id] = new_val
 
-            # FOR SAME MERCHANT POPUP - Find other rows that have this merchant but don't have this new category
+            # FOR SAME MERCHANT POPUP - Find other rows that have this merchant
             merchant_name = df.at[row_id, "Description 2"]
             same_merchant_df = df.loc[
                 (df['Description 2'] == merchant_name) &
-                (df['Category'] != new_val)
+                (df.index != row_id)
             ]
 
             # If there exists rows with the same merchant, save to session_state
@@ -138,12 +169,16 @@ if "df" in st.session_state:
                     "target_id_rows": same_merchant_df.index.tolist(),
                     "total_count": len(same_merchant_df)
                 }
-                print(f"Saved same merchant prompt to session_state: {st.session_state['merchant_prompt']}")
+                # print(f"Saved same merchant prompt to session_state: {st.session_state['merchant_prompt']}")
 
 
     if needs_reset:
         del st.session_state["tx_editor"]
         st.rerun()
+
+    # Check if merchant_prompt key exists in session_state and saves it value into prompt_data and triggers the popup
+    if prompt_data := st.session_state.get("merchant_prompt"):
+        same_merchant_popup(prompt_data)
 
     display_df = df.copy()
     for row_id, new_val in pending_categories.items():
