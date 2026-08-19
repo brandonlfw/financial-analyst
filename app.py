@@ -154,23 +154,23 @@ if "df" in st.session_state:
         else: # Make a new edit if category selected is DIFFERENT than the original in df
             pending_categories[row_id] = new_val
 
-            # FOR SAME MERCHANT POPUP - Find other rows that have this merchant
-            merchant_name = df.at[row_id, "Description 2"]
-            same_merchant_df = df.loc[
-                (df['Description 2'] == merchant_name) &
-                (df.index != row_id)
-            ]
+            # Check if the user has the apply category change to all merchants setting turned on
+            if st.session_state.get("toggle_mmc", True):
+                # FOR SAME MERCHANT POPUP - Find other rows that have this merchant
+                merchant_name = df.at[row_id, "Description 2"]
+                same_merchant_df = df.loc[
+                    (df['Description 2'] == merchant_name) &
+                    (df.index != row_id)
+                ]
 
-            # If there exists rows with the same merchant, save to session_state
-            if not same_merchant_df.empty:
-                st.session_state['merchant_prompt'] = {
-                    "merchant": merchant_name,
-                    "category": new_val,
-                    "target_id_rows": same_merchant_df.index.tolist(),
-                    "total_count": len(same_merchant_df)
-                }
-                # print(f"Saved same merchant prompt to session_state: {st.session_state['merchant_prompt']}")
-
+                # If there exists rows with the same merchant, save to session_state
+                if not same_merchant_df.empty:
+                    st.session_state['merchant_prompt'] = {
+                        "merchant": merchant_name,
+                        "category": new_val,
+                        "target_id_rows": same_merchant_df.index.tolist(),
+                        "total_count": len(same_merchant_df)
+                    }
 
     if needs_reset:
         del st.session_state["tx_editor"]
@@ -204,6 +204,13 @@ if "df" in st.session_state:
             )
         },
         disabled=[c for c in display_df.columns if c != "Category"],
+    )
+
+    # Checkbox for enabling/disabling check for duplicate merchants to apply category changes to all rows
+    toggle_mmc = st.checkbox(
+        "Check other rows for duplicate merchants and ask to apply category changes to each one",
+        value=True,
+        key="toggle_mmc"
     )
 
     for row_id in awaiting_custom_rows:
