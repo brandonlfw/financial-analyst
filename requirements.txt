@@ -3,3 +3,6 @@ matplotlib
 streamlit
 openpyxl
 plotly
+scikit-learn
+xgboost
+joblib

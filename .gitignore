@@ -2,3 +2,12 @@
 venv/
 *.xlsx
 transactions.db
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.*
+!.env.example
+models/
+data/processed/
+/IMPLEMENTATION_PLAN.md
